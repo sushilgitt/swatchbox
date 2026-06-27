@@ -6,17 +6,16 @@ EXPOSE 3000
 
 WORKDIR /app
 
-# Install ALL deps (incl. dev) so the Remix/Vite build can run.
-# NODE_ENV is intentionally not "production" here, otherwise npm would skip devDependencies.
+ENV NODE_ENV=production
+
+# Lean, memory-friendly install (prod deps only). The Vite build tool lives in
+# "dependencies" so the build still works without pulling all devDependencies.
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev && npm cache clean --force
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
 COPY . .
 
 RUN npm run build
-
-# Runtime is production.
-ENV NODE_ENV=production
 
 # docker-start runs: prisma generate && prisma migrate deploy && remix-serve
 CMD ["npm", "run", "docker-start"]
