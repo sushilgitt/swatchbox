@@ -6,6 +6,7 @@ import {
   setJsonMetafield,
   ensureMetafieldDefinitions,
 } from "./metafields.server";
+import { seedDefaultOptionTypes, publishShopConfig } from "./library.server";
 
 type Admin = { graphql: AdminApiContext["graphql"] };
 
@@ -157,6 +158,10 @@ export async function ensureShopSetup(
   const settings = await getOrCreateShopSettings(shop);
   if (!settings.metafieldDefsCreated) {
     await ensureMetafieldDefinitions(admin);
+    await seedDefaultOptionTypes(shop);
+    // Publish initial global + (empty) color library so the storefront can
+    // render color swatches from defaults without per-product setup.
+    await publishShopConfig(admin, shop);
     return prisma.shopSettings.update({
       where: { shop },
       data: { metafieldDefsCreated: true },

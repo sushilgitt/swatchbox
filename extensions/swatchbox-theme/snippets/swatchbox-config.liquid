@@ -9,6 +9,7 @@
 {%- liquid
   assign sb_config = product.metafields["$app:swatchbox"].config.value
   assign sb_global = shop.metafields["$app:swatchbox"].global.value
+  assign sb_library = shop.metafields["$app:swatchbox"].color_library.value
 -%}
 
 <script id="swatchbox-data" type="application/json">
@@ -19,6 +20,7 @@
     "showPrice": {{ show_price | default: false | json }}
   },
   "global": {{ sb_global | json }},
+  "library": {{ sb_library | json }},
   "config": {{ sb_config | json }},
   "product": {
     "id": {{ product.id | json }},
