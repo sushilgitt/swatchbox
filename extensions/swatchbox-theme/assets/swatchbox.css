@@ -63,6 +63,108 @@
     0 0 0 4px rgba(var(--color-foreground, 18, 18, 18), 0.9);
 }
 
+/* ---- Buttons ---- */
+.swatchbox__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.swatchbox__button {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: rgb(var(--color-foreground, 18, 18, 18));
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.swatchbox__button:hover {
+  border-color: rgb(var(--color-foreground, 18, 18, 18));
+}
+
+.swatchbox__button.is-active {
+  border-color: rgb(var(--color-foreground, 18, 18, 18));
+  background: rgb(var(--color-foreground, 18, 18, 18));
+  color: rgb(var(--color-background, 255, 255, 255));
+}
+
+/* ---- Enhanced dropdown ---- */
+.swatchbox__dd {
+  position: relative;
+  max-width: 320px;
+}
+
+.swatchbox__dd-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.35);
+  border-radius: 6px;
+  background: rgb(var(--color-background, 255, 255, 255));
+  color: rgb(var(--color-foreground, 18, 18, 18));
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.swatchbox__dd-caret {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.swatchbox__dd-list {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid rgba(var(--color-foreground, 18, 18, 18), 0.18);
+  border-radius: 8px;
+  background: rgb(var(--color-background, 255, 255, 255));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  max-height: 280px;
+  overflow: auto;
+}
+
+.swatchbox__dd-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgb(var(--color-foreground, 18, 18, 18));
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.swatchbox__dd-item:hover {
+  background: rgba(var(--color-foreground, 18, 18, 18), 0.06);
+}
+
+.swatchbox__dd-item.is-active {
+  font-weight: 600;
+}
+
+.swatchbox__dd-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex: 0 0 auto;
+}
+
 /* Keep the native control hidden but accessible to the theme's variant JS. */
 [data-swatchbox-hidden="true"] {
   display: none !important;

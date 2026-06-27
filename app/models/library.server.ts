@@ -1,5 +1,5 @@
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
-import type { ColorLibraryEntry } from "@prisma/client";
+import type { ColorLibraryEntry, DisplayType } from "@prisma/client";
 import prisma from "../db.server";
 import {
   METAFIELD_KEYS,
@@ -95,6 +95,59 @@ export async function seedDefaultOptionTypes(shop: string): Promise<void> {
       { shop, optionName: "Colour", displayType: "color" },
     ],
     skipDuplicates: true,
+  });
+}
+
+export async function getOptionTypeMappings(shop: string) {
+  return prisma.optionTypeMapping.findMany({
+    where: { shop },
+    orderBy: { optionName: "asc" },
+  });
+}
+
+/** Replace the full set of option-name -> display-type mappings for a shop. */
+export async function setOptionTypeMappings(
+  shop: string,
+  mappings: { optionName: string; displayType: DisplayType }[],
+): Promise<void> {
+  const clean = mappings
+    .map((m) => ({
+      optionName: m.optionName.trim(),
+      displayType: m.displayType,
+    }))
+    .filter((m) => m.optionName !== "");
+  // de-dup by option name (last wins)
+  const byName = new Map<string, DisplayType>();
+  for (const m of clean) byName.set(m.optionName, m.displayType);
+
+  await prisma.$transaction([
+    prisma.optionTypeMapping.deleteMany({ where: { shop } }),
+    ...(byName.size > 0
+      ? [
+          prisma.optionTypeMapping.createMany({
+            data: Array.from(byName, ([optionName, displayType]) => ({
+              shop,
+              optionName,
+              displayType,
+            })),
+            skipDuplicates: true,
+          }),
+        ]
+      : []),
+  ]);
+}
+
+/** Update the global swatch styling tokens. */
+export async function updateSwatchStyle(
+  shop: string,
+  style: { shape?: string; size?: number },
+): Promise<void> {
+  await prisma.shopSettings.update({
+    where: { shop },
+    data: {
+      ...(style.shape ? { swatchShape: style.shape } : {}),
+      ...(typeof style.size === "number" ? { swatchSize: style.size } : {}),
+    },
   });
 }
 

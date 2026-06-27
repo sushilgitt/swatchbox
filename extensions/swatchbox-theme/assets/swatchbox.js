@@ -327,9 +327,155 @@
     }
   }
 
-  /* Decide which option(s) to render as swatches. */
+  /* Shared: a wrapper with a "Option: <selected>" label. */
+  function createWrap(optionName, modifier) {
+    var wrap = document.createElement("div");
+    wrap.className = "swatchbox swatchbox--" + modifier;
+    wrap.setAttribute("data-option", optionName);
+    var label = document.createElement("div");
+    label.className = "swatchbox__label";
+    var nameEl = document.createElement("span");
+    nameEl.className = "swatchbox__label-name";
+    nameEl.textContent = optionName + ": ";
+    var selectedSpan = document.createElement("span");
+    selectedSpan.className = "swatchbox__selected";
+    label.appendChild(nameEl);
+    label.appendChild(selectedSpan);
+    wrap.appendChild(label);
+    return { wrap: wrap, selectedSpan: selectedSpan };
+  }
+
+  function syncOnChange(control, setActive) {
+    var syncEl = control.kind === "select" ? control.el : control.inputs[0].form;
+    if (syncEl) {
+      syncEl.addEventListener("change", function () {
+        setActive(currentValue(control));
+      });
+    }
+  }
+
+  function buildButtons(optionName, values, settings, control, mount) {
+    var c = createWrap(optionName, "buttons");
+    var list = document.createElement("div");
+    list.className = "swatchbox__buttons";
+    c.wrap.appendChild(list);
+
+    var buttons = [];
+    values.forEach(function (v) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "swatchbox__button";
+      btn.setAttribute("data-value", v.value);
+      btn.textContent = v.value;
+      btn.addEventListener("click", function () {
+        selectValue(control, v.value);
+        setActive(v.value);
+      });
+      list.appendChild(btn);
+      buttons.push({ value: v.value, el: btn });
+    });
+
+    function setActive(value) {
+      c.selectedSpan.textContent = value || "";
+      buttons.forEach(function (b) {
+        var on = norm(b.value) === norm(value);
+        b.el.setAttribute("aria-pressed", on ? "true" : "false");
+        b.el.classList.toggle("is-active", on);
+      });
+    }
+
+    mount.parentNode.insertBefore(c.wrap, mount);
+    setActive(currentValue(control));
+    syncOnChange(control, setActive);
+  }
+
+  function buildDropdown(optionName, values, settings, control, mount) {
+    var c = createWrap(optionName, "dropdown");
+    var dd = document.createElement("div");
+    dd.className = "swatchbox__dd";
+
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "swatchbox__dd-toggle";
+    toggle.setAttribute("aria-expanded", "false");
+    var current = document.createElement("span");
+    current.className = "swatchbox__dd-current";
+    var caret = document.createElement("span");
+    caret.className = "swatchbox__dd-caret";
+    caret.textContent = "▾";
+    toggle.appendChild(current);
+    toggle.appendChild(caret);
+
+    var listEl = document.createElement("ul");
+    listEl.className = "swatchbox__dd-list";
+    listEl.hidden = true;
+
+    var items = [];
+    values.forEach(function (v) {
+      var li = document.createElement("li");
+      var item = document.createElement("button");
+      item.type = "button";
+      item.className = "swatchbox__dd-item";
+      item.setAttribute("data-value", v.value);
+      if (v.hex || v.imageUrl) {
+        var dot = document.createElement("span");
+        dot.className = "swatchbox__dd-dot";
+        if (v.imageUrl) {
+          dot.style.background = "center/cover no-repeat url(" + v.imageUrl + ")";
+        } else {
+          dot.style.background = v.hex;
+        }
+        item.appendChild(dot);
+      }
+      var txt = document.createElement("span");
+      txt.textContent = v.value;
+      item.appendChild(txt);
+      item.addEventListener("click", function () {
+        selectValue(control, v.value);
+        setActive(v.value);
+        close();
+      });
+      li.appendChild(item);
+      listEl.appendChild(li);
+      items.push({ value: v.value, el: item });
+    });
+
+    function open() {
+      listEl.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+    }
+    function close() {
+      listEl.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+    }
+    toggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      listEl.hidden ? open() : close();
+    });
+    document.addEventListener("click", close);
+
+    function setActive(value) {
+      current.textContent = value || "";
+      items.forEach(function (it) {
+        it.el.classList.toggle("is-active", norm(it.value) === norm(value));
+      });
+    }
+
+    dd.appendChild(toggle);
+    dd.appendChild(listEl);
+    c.wrap.appendChild(dd);
+    mount.parentNode.insertBefore(c.wrap, mount);
+    setActive(currentValue(control));
+    syncOnChange(control, setActive);
+  }
+
+  /*
+   * Decide which option(s) to render and how. Per-product config covers its own
+   * option; global option-type mappings cover every other option (any type).
+   */
   function getSpecs(data) {
     var specs = [];
+    var seen = {};
     var cfg = data.config;
     if (cfg && cfg.swatchOption && cfg.values && cfg.values.length) {
       var explicit = {};
@@ -341,17 +487,14 @@
         displayType: cfg.displayType || "color",
         explicit: explicit,
       });
-      return specs; // per-product wins outright
+      seen[norm(cfg.swatchOption)] = true;
     }
     var global = data.global;
     if (global && global.optionTypes) {
       global.optionTypes.forEach(function (ot) {
-        if (ot && ot.name && (ot.type === "color" || ot.type === "variant_image")) {
-          specs.push({
-            optionName: ot.name,
-            displayType: ot.type,
-            explicit: null,
-          });
+        if (ot && ot.name && ot.type && !seen[norm(ot.name)]) {
+          specs.push({ optionName: ot.name, displayType: ot.type, explicit: null });
+          seen[norm(ot.name)] = true;
         }
       });
     }
@@ -394,13 +537,15 @@
       var resolved = resolveValues(controlValues(control), spec, data);
       if (!resolved.length) return;
 
-      buildSwatches(
-        spec.optionName,
-        resolved,
-        settings,
-        control,
-        mountPointFor(control)
-      );
+      var mount = mountPointFor(control);
+      var dt = spec.displayType || "color";
+      if (dt === "button") {
+        buildButtons(spec.optionName, resolved, settings, control, mount);
+      } else if (dt === "dropdown") {
+        buildDropdown(spec.optionName, resolved, settings, control, mount);
+      } else {
+        buildSwatches(spec.optionName, resolved, settings, control, mount);
+      }
       hideNativeControl(control);
       rendered++;
     });

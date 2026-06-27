@@ -224,6 +224,8 @@ const DISPLAY_OPTIONS: { label: string; value: SwatchDisplayType }[] = [
   { label: "Color swatches", value: "color" },
   { label: "Image swatches", value: "image" },
   { label: "Variant image", value: "variant_image" },
+  { label: "Buttons", value: "button" },
+  { label: "Dropdown", value: "dropdown" },
 ];
 
 export default function ProductEditor() {
@@ -325,8 +327,9 @@ export default function ProductEditor() {
       if (displayType === "image") {
         return { value: v, type: "image", imageUrl: imageByValue[v] };
       }
-      // variant_image — storefront resolves from live variant images
-      return { value: v, type: "variant_image" };
+      // variant_image, button, dropdown — no per-value data needed; the
+      // storefront resolves variant images / renders from the option values.
+      return { value: v, type: displayType };
     });
     fetcher.submit(
       { payload: JSON.stringify({ swatchOption: optionName, displayType, values }) },
@@ -429,7 +432,7 @@ export default function ProductEditor() {
                   />
                 ))}
               </BlockStack>
-            ) : (
+            ) : displayType === "variant_image" ? (
               <BlockStack gap="300">
                 <Text as="p" variant="bodySm" tone="subdued">
                   Each value uses its variant's product image automatically.
@@ -459,6 +462,37 @@ export default function ProductEditor() {
                     )}
                   </InlineStack>
                 ))}
+              </BlockStack>
+            ) : (
+              // button | dropdown — render straight from the option values
+              <BlockStack gap="300">
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {displayType === "button"
+                    ? "Each value renders as a selectable button. No extra setup needed."
+                    : "Values render in an enhanced dropdown. No extra setup needed."}
+                </Text>
+                <InlineStack gap="200">
+                  {currentValues.map((v) =>
+                    displayType === "button" ? (
+                      <span
+                        key={v}
+                        style={{
+                          padding: "6px 14px",
+                          border: "1px solid #8a8a8a",
+                          borderRadius: 6,
+                          fontSize: 14,
+                        }}
+                      >
+                        {v}
+                      </span>
+                    ) : (
+                      <Text key={v} as="span" variant="bodyMd">
+                        {v}
+                        {v !== currentValues[currentValues.length - 1] ? " · " : ""}
+                      </Text>
+                    ),
+                  )}
+                </InlineStack>
               </BlockStack>
             )}
           </BlockStack>
