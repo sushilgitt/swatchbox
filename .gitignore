@@ -26,3 +26,8 @@ pnpm-lock.yaml
 
 # Coolify deployment credentials (contains API token + DB password)
 /.coolify/
+
+# Internal research/planning docs — keep out of the public repo
+Variant-Swatch-King-Research.pdf
+*.research.pdf
+

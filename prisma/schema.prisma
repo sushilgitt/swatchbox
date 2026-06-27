@@ -32,3 +32,169 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+// ---------------------------------------------------------------------------
+// Swatchbox domain models
+// Postgres is the editing source of truth. On save we compile the relevant
+// slice into app-owned metafields ($app:swatchbox) that the theme extension
+// reads directly from Liquid (see app/models/swatch.server.ts).
+// ---------------------------------------------------------------------------
+
+enum DisplayType {
+  color
+  image
+  variant_image
+  button
+  dropdown
+}
+
+enum OosBehavior {
+  HIDE
+  DISABLE
+  NONE
+}
+
+enum SwatchScope {
+  GLOBAL
+  PRODUCT
+}
+
+enum SwatchValueSource {
+  CSV
+  NATIVE
+  MANUAL
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  ERROR
+}
+
+enum ImportStatus {
+  QUEUED
+  RUNNING
+  DONE
+  ERROR
+}
+
+/// One row per shop. Created lazily on first admin visit.
+model ShopSettings {
+  id                        String      @id @default(cuid())
+  shop                      String      @unique
+  defaultDisplayType        DisplayType @default(color)
+  oosBehavior               OosBehavior @default(NONE)
+  lowStockThreshold         Int         @default(0)
+  lowStockMessage           String      @default("Only {qty} left!")
+  showPrice                 Boolean     @default(false)
+  showBadges                Boolean     @default(true)
+  collectionSwatchesEnabled Boolean     @default(false)
+  splitByVariant            Boolean     @default(false)
+  swatchShape               String      @default("circle") // circle | square | rounded
+  swatchSize                Int         @default(36) // px
+  onboardingStep            Int         @default(0)
+  appEmbedEnabledCache      Boolean     @default(false)
+  globalConfigJson          String?     @db.Text // last compiled $app:swatchbox/global payload
+  metafieldDefsCreated      Boolean     @default(false)
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+}
+
+/// Global default display type per option name (e.g. "Color" -> color, "Size" -> button).
+model OptionTypeMapping {
+  id          String      @id @default(cuid())
+  shop        String
+  optionName  String
+  displayType DisplayType
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([shop, optionName])
+  @@index([shop])
+}
+
+/// Canonical color library: name -> hex / dual-hex / image. Built from CSV import,
+/// native color-pattern metaobjects, or manual entry.
+model ColorLibraryEntry {
+  id        String            @id @default(cuid())
+  shop      String
+  name      String
+  hex       String?
+  hex2      String?
+  imageUrl  String?
+  source    SwatchValueSource @default(MANUAL)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([shop, name])
+  @@index([shop])
+}
+
+/// Per-product swatch configuration + metafield sync state.
+model ProductConfig {
+  id                  String       @id @default(cuid())
+  shop                String
+  productId           String // Shopify GID, e.g. gid://shopify/Product/123
+  configJson          String       @db.Text // compiled $app:swatchbox/config payload
+  displayTypeOverride DisplayType?
+  sizeChartUrl        String?
+  publishedAt         DateTime?
+  metafieldSyncStatus SyncStatus   @default(PENDING)
+  syncError           String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([shop, productId])
+  @@index([shop])
+}
+
+/// Per-value swatch resolution, global or scoped to a single product.
+model SwatchValue {
+  id         String      @id @default(cuid())
+  shop       String
+  scope      SwatchScope @default(GLOBAL)
+  productId  String?
+  optionName String
+  value      String // the option value label, e.g. "Royal Blue"
+  swatchType DisplayType @default(color)
+  hex        String?
+  hex2       String?
+  imageUrl   String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([shop, scope, productId, optionName, value])
+  @@index([shop, productId])
+}
+
+/// CSV import job tracking.
+model ImportJob {
+  id              String       @id @default(cuid())
+  shop            String
+  status          ImportStatus @default(QUEUED)
+  fileName        String?
+  totalRows       Int          @default(0)
+  processedRows   Int          @default(0)
+  errorRows       Int          @default(0)
+  errorReportJson String?      @db.Text
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([shop])
+}
+
+/// Reusable badge definitions (e.g. "Sale", "New").
+model BadgeDefinition {
+  id        String   @id @default(cuid())
+  shop      String
+  key       String
+  label     String
+  bgColor   String   @default("#000000")
+  textColor String   @default("#ffffff")
+  icon      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, key])
+  @@index([shop])
+}

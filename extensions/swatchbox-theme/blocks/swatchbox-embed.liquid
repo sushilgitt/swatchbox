@@ -1,0 +1,58 @@
+{% comment %}
+  Swatchbox app embed block.
+  Renders globally (target: body). On product pages it injects the swatch config
+  + variant data as JSON and loads the storefront script, which replaces the
+  native variant picker with swatches. No theme code edits required.
+{% endcomment %}
+
+{% if block.settings.enabled %}
+  {%- if product -%}
+    {{ 'swatchbox.css' | asset_url | stylesheet_tag }}
+
+    {% render 'swatchbox-config', shape: block.settings.shape, size: block.settings.size, show_price: block.settings.show_price %}
+
+    <script src="{{ 'swatchbox.js' | asset_url }}" defer></script>
+  {%- endif -%}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Swatchbox",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enabled",
+      "label": "Enable Swatchbox on product pages",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "shape",
+      "label": "Swatch shape",
+      "options": [
+        { "value": "circle", "label": "Circle" },
+        { "value": "square", "label": "Square" },
+        { "value": "rounded", "label": "Rounded square" }
+      ],
+      "default": "circle"
+    },
+    {
+      "type": "range",
+      "id": "size",
+      "label": "Swatch size",
+      "min": 24,
+      "max": 56,
+      "step": 2,
+      "unit": "px",
+      "default": 36
+    },
+    {
+      "type": "checkbox",
+      "id": "show_price",
+      "label": "Show price difference on swatches",
+      "default": false
+    }
+  ]
+}
+{% endschema %}

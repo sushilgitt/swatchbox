@@ -1,0 +1,43 @@
+{% comment %}
+  Serializes everything the storefront script needs into a single JSON island.
+  Read directly from Liquid — no network request on the product page.
+
+  App-owned metafields are referenced with the reserved namespace via bracket
+  notation: product.metafields["$app:swatchbox"].config.value
+{% endcomment %}
+
+{%- liquid
+  assign sb_config = product.metafields["$app:swatchbox"].config.value
+  assign sb_global = shop.metafields["$app:swatchbox"].global.value
+-%}
+
+<script id="swatchbox-data" type="application/json">
+{
+  "settings": {
+    "shape": {{ shape | default: 'circle' | json }},
+    "size": {{ size | default: 36 | json }},
+    "showPrice": {{ show_price | default: false | json }}
+  },
+  "global": {{ sb_global | json }},
+  "config": {{ sb_config | json }},
+  "product": {
+    "id": {{ product.id | json }},
+    "url": {{ product.url | json }},
+    "optionNames": {{ product.options | json }},
+    "currentVariantId": {{ product.selected_or_first_available_variant.id | json }},
+    "variants": [
+      {%- for v in product.variants -%}
+      {
+        "id": {{ v.id | json }},
+        "title": {{ v.title | json }},
+        "available": {{ v.available | json }},
+        "inventoryQuantity": {{ v.inventory_quantity | json }},
+        "price": {{ v.price | json }},
+        "options": {{ v.options | json }},
+        "featuredImage": {{ v.featured_image.src | json }}
+      }{%- unless forloop.last -%},{%- endunless -%}
+      {%- endfor -%}
+    ]
+  }
+}
+</script>
