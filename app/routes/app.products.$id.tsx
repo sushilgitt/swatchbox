@@ -13,6 +13,8 @@ import {
   Box,
   Divider,
   Thumbnail,
+  Button,
+  Spinner,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -20,6 +22,7 @@ import {
   getProductConfig,
   parseConfig,
   saveProductConfig,
+  type SwatchDisplayType,
   type SwatchValueConfig,
 } from "../models/swatch.server";
 import { guessHex, isHex } from "../lib/colorNames";
@@ -38,6 +41,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           title
           featuredImage { url }
           options { id name position optionValues { id name } }
+          variants(first: 100) {
+            nodes { id title image { url } selectedOptions { name value } }
+          }
         }
       }`,
     { variables: { id: productGid } },
@@ -58,12 +64,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const form = await request.formData();
   const payload = JSON.parse(String(form.get("payload"))) as {
     swatchOption: string;
+    displayType: SwatchDisplayType;
     values: SwatchValueConfig[];
   };
 
   const result = await saveProductConfig(admin, session.shop, productGid, {
     swatchOption: payload.swatchOption,
-    displayType: "color",
+    displayType: payload.displayType,
     values: payload.values,
   });
 
@@ -92,14 +99,7 @@ function ColorRow({
   const valid = isHex(hex);
   return (
     <InlineStack gap="400" blockAlign="center" wrap={false}>
-      <label
-        style={{
-          cursor: "pointer",
-          position: "relative",
-          display: "inline-block",
-          flex: "0 0 auto",
-        }}
-      >
+      <label style={{ cursor: "pointer", position: "relative", flex: "0 0 auto" }}>
         <span
           style={{
             display: "block",
@@ -108,7 +108,6 @@ function ColorRow({
             borderRadius: "50%",
             background: valid ? hex : "#ffffff",
             border: "1px solid #c9cccf",
-            boxShadow: "inset 0 0 0 2px #fff",
           }}
         />
         <input
@@ -138,12 +137,94 @@ function ColorRow({
           autoComplete="off"
           onChange={onChange}
           error={valid ? undefined : "Enter a hex like #4169e1"}
-          prefix=""
         />
       </Box>
     </InlineStack>
   );
 }
+
+function ImageRow({
+  label,
+  imageUrl,
+  onChange,
+  onUpload,
+}: {
+  label: string;
+  imageUrl: string;
+  onChange: (url: string) => void;
+  onUpload: (file: File) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const inputId = `sb-file-${label.replace(/\W+/g, "-")}`;
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      await onUpload(file);
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <InlineStack gap="400" blockAlign="center" wrap={false}>
+      <span
+        style={{
+          display: "block",
+          width: 40,
+          height: 40,
+          borderRadius: 8,
+          flex: "0 0 auto",
+          border: "1px solid #c9cccf",
+          background: imageUrl
+            ? `center/cover no-repeat url(${imageUrl})`
+            : "#f6f6f7",
+        }}
+      />
+      <Box minWidth="140px">
+        <Text as="span" variant="bodyMd" fontWeight="medium">
+          {label}
+        </Text>
+      </Box>
+      <InlineStack gap="200" blockAlign="center">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          style={{ display: "none" }}
+        />
+        <Button
+          size="slim"
+          onClick={() => document.getElementById(inputId)?.click()}
+          disabled={busy}
+        >
+          {busy ? "Uploading…" : imageUrl ? "Replace" : "Upload"}
+        </Button>
+        {busy && <Spinner size="small" />}
+      </InlineStack>
+      <Box minWidth="200px">
+        <TextField
+          label={`${label} image URL`}
+          labelHidden
+          value={imageUrl}
+          autoComplete="off"
+          placeholder="or paste an image URL"
+          onChange={onChange}
+        />
+      </Box>
+    </InlineStack>
+  );
+}
+
+const DISPLAY_OPTIONS: { label: string; value: SwatchDisplayType }[] = [
+  { label: "Color swatches", value: "color" },
+  { label: "Image swatches", value: "image" },
+  { label: "Variant image", value: "variant_image" },
+];
 
 export default function ProductEditor() {
   const { product, existing } = useLoaderData<typeof loader>();
@@ -157,8 +238,6 @@ export default function ProductEditor() {
     }),
   );
 
-  // Default swatch option: existing config -> an option literally named like a
-  // color -> the first option.
   const defaultOption =
     existing?.swatchOption ??
     options.find((o) => /colou?r/i.test(o.name))?.name ??
@@ -166,89 +245,118 @@ export default function ProductEditor() {
     "";
 
   const [optionName, setOptionName] = useState(defaultOption);
+  const [displayType, setDisplayType] = useState<SwatchDisplayType>(
+    (existing?.displayType as SwatchDisplayType) ?? "color",
+  );
 
   const currentValues = useMemo(
     () => options.find((o) => o.name === optionName)?.values ?? [],
     [options, optionName],
   );
 
-  // hex per value, seeded from existing config then guessed.
+  // Map each option value -> the featured image of a variant with that value.
+  const variantImageByValue = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of product.variants.nodes as {
+      image: { url: string } | null;
+      selectedOptions: { name: string; value: string }[];
+    }[]) {
+      const so = v.selectedOptions.find((s) => s.name === optionName);
+      if (so && v.image?.url && !map[so.value]) map[so.value] = v.image.url;
+    }
+    return map;
+  }, [product.variants.nodes, optionName]);
+
   const [hexByValue, setHexByValue] = useState<Record<string, string>>(() => {
     const seed: Record<string, string> = {};
-    for (const v of existing?.values ?? []) {
-      if (v.hex) seed[v.value] = v.hex;
-    }
+    for (const v of existing?.values ?? []) if (v.hex) seed[v.value] = v.hex;
+    return seed;
+  });
+  const [imageByValue, setImageByValue] = useState<Record<string, string>>(() => {
+    const seed: Record<string, string> = {};
+    for (const v of existing?.values ?? [])
+      if (v.imageUrl) seed[v.value] = v.imageUrl;
     return seed;
   });
 
-  // Ensure every current value has a hex (guess if missing).
   useEffect(() => {
     setHexByValue((prev) => {
       const next = { ...prev };
       let changed = false;
-      for (const v of currentValues) {
+      for (const v of currentValues)
         if (!next[v]) {
           next[v] = guessHex(v);
           changed = true;
         }
-      }
       return changed ? next : prev;
     });
   }, [currentValues]);
 
-  const isSaving =
-    fetcher.state !== "idle" && fetcher.formMethod === "POST";
+  const isSaving = fetcher.state !== "idle" && fetcher.formMethod === "POST";
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
-      if (fetcher.data.ok) {
-        shopify.toast.show("Swatches saved and published");
-      } else {
-        shopify.toast.show("Saved locally, but publishing failed", {
-          isError: true,
-        });
-      }
+      shopify.toast.show(
+        fetcher.data.ok
+          ? "Swatches saved and published"
+          : "Saved locally, but publishing failed",
+        { isError: !fetcher.data.ok },
+      );
     }
   }, [fetcher.state, fetcher.data, shopify]);
 
+  const uploadImage = async (value: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (data.ok && data.url) {
+      setImageByValue((prev) => ({ ...prev, [value]: data.url }));
+    } else {
+      shopify.toast.show(data.error || "Upload failed", { isError: true });
+    }
+  };
+
   const save = () => {
-    const values: SwatchValueConfig[] = currentValues.map((v) => ({
-      value: v,
-      type: "color",
-      hex: hexByValue[v],
-    }));
+    const values: SwatchValueConfig[] = currentValues.map((v) => {
+      if (displayType === "color") {
+        return { value: v, type: "color", hex: hexByValue[v] };
+      }
+      if (displayType === "image") {
+        return { value: v, type: "image", imageUrl: imageByValue[v] };
+      }
+      // variant_image — storefront resolves from live variant images
+      return { value: v, type: "variant_image" };
+    });
     fetcher.submit(
-      { payload: JSON.stringify({ swatchOption: optionName, values }) },
+      { payload: JSON.stringify({ swatchOption: optionName, displayType, values }) },
       { method: "POST" },
     );
   };
 
-  const allValid = currentValues.every((v) => isHex(hexByValue[v] ?? ""));
+  const colorsValid =
+    displayType !== "color" ||
+    currentValues.every((v) => isHex(hexByValue[v] ?? ""));
+  const imagesValid =
+    displayType !== "image" ||
+    currentValues.every((v) => (imageByValue[v] ?? "").trim() !== "");
+  const canSave =
+    !!optionName && currentValues.length > 0 && colorsValid && imagesValid;
 
   return (
     <Page
       backAction={{ content: "Products", url: "/app/products" }}
       title={product.title}
-      titleMetadata={
-        existing ? <Text as="span" tone="subdued" variant="bodySm">Configured</Text> : undefined
-      }
     >
       <TitleBar title={product.title}>
-        <button
-          variant="primary"
-          onClick={save}
-          disabled={!optionName || currentValues.length === 0 || !allValid}
-        >
+        <button variant="primary" onClick={save} disabled={!canSave}>
           {isSaving ? "Saving…" : "Save"}
         </button>
       </TitleBar>
 
       <BlockStack gap="500">
         {fetcher.data && !fetcher.data.ok && (
-          <Banner
-            tone="warning"
-            title="Saved to your database, but couldn't publish to the storefront"
-          >
+          <Banner tone="warning" title="Saved to your database, but couldn't publish to the storefront">
             <p>{fetcher.data.error ?? "Unknown error while writing the metafield."}</p>
           </Banner>
         )}
@@ -256,73 +364,100 @@ export default function ProductEditor() {
         <Card>
           <BlockStack gap="400">
             <InlineStack gap="300" blockAlign="center">
-              <Thumbnail
-                source={product.featuredImage?.url ?? ""}
-                alt={product.title}
-                size="small"
-              />
+              <Thumbnail source={product.featuredImage?.url ?? ""} alt={product.title} size="small" />
               <BlockStack gap="050">
                 <Text as="h2" variant="headingMd">
-                  Color swatches
+                  Swatch setup
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Choose which option becomes swatches, then set a color for each value.
+                  Pick the option to turn into swatches and how it should look.
                 </Text>
               </BlockStack>
             </InlineStack>
 
-            <Select
-              label="Swatch option"
-              options={options.map((o) => ({ label: o.name, value: o.name }))}
-              value={optionName}
-              onChange={setOptionName}
-              helpText="The product option whose values will render as clickable color swatches."
-            />
+            <InlineStack gap="400">
+              <Box minWidth="240px">
+                <Select
+                  label="Swatch option"
+                  options={options.map((o) => ({ label: o.name, value: o.name }))}
+                  value={optionName}
+                  onChange={setOptionName}
+                />
+              </Box>
+              <Box minWidth="240px">
+                <Select
+                  label="Display type"
+                  options={DISPLAY_OPTIONS}
+                  value={displayType}
+                  onChange={(v) => setDisplayType(v as SwatchDisplayType)}
+                />
+              </Box>
+            </InlineStack>
           </BlockStack>
         </Card>
 
         <Card>
           <BlockStack gap="400">
             <Text as="h3" variant="headingSm">
-              {optionName || "Option"} colors
+              {optionName || "Option"} values
             </Text>
 
             {currentValues.length === 0 ? (
               <Text as="p" tone="subdued">
                 This option has no values.
               </Text>
-            ) : (
+            ) : displayType === "color" ? (
               <BlockStack gap="300">
-                {/* live preview strip */}
-                <InlineStack gap="200" blockAlign="center">
-                  {currentValues.map((v) => (
-                    <span
-                      key={v}
-                      title={v}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        background: isHex(hexByValue[v] ?? "")
-                          ? hexByValue[v]
-                          : "#fff",
-                        border: "1px solid #c9cccf",
-                      }}
-                    />
-                  ))}
-                </InlineStack>
-
-                <Divider />
-
                 {currentValues.map((v) => (
                   <ColorRow
                     key={v}
                     label={v}
                     hex={hexByValue[v] ?? ""}
-                    onChange={(hex) =>
-                      setHexByValue((prev) => ({ ...prev, [v]: hex }))
-                    }
+                    onChange={(hex) => setHexByValue((p) => ({ ...p, [v]: hex }))}
                   />
+                ))}
+              </BlockStack>
+            ) : displayType === "image" ? (
+              <BlockStack gap="300">
+                {currentValues.map((v) => (
+                  <ImageRow
+                    key={v}
+                    label={v}
+                    imageUrl={imageByValue[v] ?? ""}
+                    onChange={(url) => setImageByValue((p) => ({ ...p, [v]: url }))}
+                    onUpload={(file) => uploadImage(v, file)}
+                  />
+                ))}
+              </BlockStack>
+            ) : (
+              <BlockStack gap="300">
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Each value uses its variant's product image automatically.
+                </Text>
+                {currentValues.map((v) => (
+                  <InlineStack key={v} gap="400" blockAlign="center" wrap={false}>
+                    <span
+                      style={{
+                        display: "block",
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        flex: "0 0 auto",
+                        border: "1px solid #c9cccf",
+                        background: variantImageByValue[v]
+                          ? `center/cover no-repeat url(${variantImageByValue[v]})`
+                          : "#f6f6f7",
+                      }}
+                    />
+                    <Text as="span" variant="bodyMd" fontWeight="medium">
+                      {v}
+                    </Text>
+                    {!variantImageByValue[v] && (
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        No variant image
+                      </Text>
+                    )}
+                  </InlineStack>
                 ))}
               </BlockStack>
             )}

@@ -193,15 +193,50 @@
     return "50%";
   }
 
-  /* Resolve each native value to a swatch (explicit map -> library -> guess). */
-  function resolveValues(values, explicit, library) {
+  /* Find the featured image of a variant that has `value` for `optionName`. */
+  function variantImageFor(value, optionName, data) {
+    var product = data.product || {};
+    var names = product.optionNames || [];
+    var idx = -1;
+    for (var i = 0; i < names.length; i++) {
+      if (norm(names[i]) === norm(optionName)) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) return null;
+    var variants = product.variants || [];
+    for (var v = 0; v < variants.length; v++) {
+      var opts = variants[v].options || [];
+      if (norm(opts[idx]) === norm(value) && variants[v].featuredImage) {
+        return variants[v].featuredImage;
+      }
+    }
+    return null;
+  }
+
+  /*
+   * Resolve each native value to a swatch. Precedence per value:
+   *   variant_image (live variant image) -> explicit per-product -> library -> guess.
+   */
+  function resolveValues(values, spec, data) {
+    var explicit = spec.explicit;
+    var library = data.library;
     return values.map(function (cv) {
       var key = normName(cv.value);
-      if (explicit && explicit[key]) {
-        var ex = explicit[key];
+      var ex = explicit ? explicit[key] : null;
+      var type = (ex && ex.type) || spec.displayType || "color";
+
+      if (type === "variant_image") {
+        var img = variantImageFor(cv.value, spec.optionName, data);
+        return img
+          ? { value: cv.value, type: "image", imageUrl: img }
+          : { value: cv.value, type: "color", hex: guessHex(cv.value) };
+      }
+      if (ex) {
         return {
           value: cv.value,
-          type: ex.type || (ex.imageUrl ? "image" : "color"),
+          type: ex.imageUrl ? "image" : ex.type || "color",
           hex: ex.hex,
           imageUrl: ex.imageUrl,
         };
@@ -301,14 +336,22 @@
       cfg.values.forEach(function (v) {
         explicit[normName(v.value)] = v;
       });
-      specs.push({ optionName: cfg.swatchOption, explicit: explicit });
+      specs.push({
+        optionName: cfg.swatchOption,
+        displayType: cfg.displayType || "color",
+        explicit: explicit,
+      });
       return specs; // per-product wins outright
     }
     var global = data.global;
     if (global && global.optionTypes) {
       global.optionTypes.forEach(function (ot) {
-        if (ot && ot.type === "color" && ot.name) {
-          specs.push({ optionName: ot.name, explicit: null });
+        if (ot && ot.name && (ot.type === "color" || ot.type === "variant_image")) {
+          specs.push({
+            optionName: ot.name,
+            displayType: ot.type,
+            explicit: null,
+          });
         }
       });
     }
@@ -348,11 +391,7 @@
       var control = findOptionControl(form, spec.optionName, wanted);
       if (!control) return;
 
-      var resolved = resolveValues(
-        controlValues(control),
-        spec.explicit,
-        data.library
-      );
+      var resolved = resolveValues(controlValues(control), spec, data);
       if (!resolved.length) return;
 
       buildSwatches(
