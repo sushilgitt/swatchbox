@@ -183,7 +183,7 @@ export default function Index() {
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" tone="subdued">
                         Unlock image swatches, buttons, badges, inventory rules and
-                        collection swatches for $5/month.
+                        collection swatches for $10/month.
                       </Text>
                       <Button url="/app/billing" variant="primary">
                         Upgrade to Pro

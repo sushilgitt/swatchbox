@@ -118,7 +118,7 @@ export default function Billing() {
                   {isPro && <Badge tone="success">Current plan</Badge>}
                 </InlineStack>
                 <Text as="p" variant="heading2xl">
-                  $5<Text as="span" variant="bodyMd" tone="subdued"> / month</Text>
+                  $10<Text as="span" variant="bodyMd" tone="subdued"> / month</Text>
                 </Text>
                 <List>
                   {PRO_FEATURES.map((f) => (

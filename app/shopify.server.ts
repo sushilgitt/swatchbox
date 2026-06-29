@@ -22,7 +22,7 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   billing: {
     [PRO_PLAN]: {
-      amount: 5,
+      amount: 10,
       currencyCode: "USD",
       interval: BillingInterval.Every30Days,
     },

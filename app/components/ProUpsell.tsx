@@ -19,7 +19,7 @@ export function ProUpsell({
             {feature} is available on the Pro plan
           </Text>
           <Text as="p" tone="subdued">
-            Upgrade to Pro ($5/month) to unlock {feature.toLowerCase()}, plus image
+            Upgrade to Pro ($10/month) to unlock {feature.toLowerCase()}, plus image
             swatches, buttons & dropdowns, badges, inventory rules and collection
             swatches.
           </Text>
