@@ -279,6 +279,42 @@
   flex: 0 0 auto;
 }
 
+/* ---- Out of stock + low stock ---- */
+.swatchbox__swatch.is-unavailable {
+  cursor: not-allowed;
+}
+
+.swatchbox__swatch.is-unavailable .swatchbox__fill {
+  opacity: 0.4;
+}
+
+/* diagonal line through unavailable color/image swatches */
+.swatchbox__swatch.is-unavailable::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -2px;
+  right: -2px;
+  height: 1px;
+  background: rgba(var(--color-foreground, 18, 18, 18), 0.55);
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+
+.swatchbox__button.is-unavailable,
+.swatchbox__dd-item.is-unavailable {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.swatchbox__lowstock {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b98900;
+}
+
 /* Keep the native control hidden but accessible to the theme's variant JS. */
 [data-swatchbox-hidden="true"] {
   display: none !important;

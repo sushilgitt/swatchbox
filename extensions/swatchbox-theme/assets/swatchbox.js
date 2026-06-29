@@ -218,6 +218,80 @@
     return variant && variant.featuredImage ? variant.featuredImage : null;
   }
 
+  /*
+   * Aggregate inventory + price for an option value across every variant that
+   * has it: available if ANY matching variant is available; qty is the summed
+   * tracked inventory; price/sale come from the first matching variant.
+   */
+  function aggregateValue(value, optionName, data) {
+    var idx = optionIndex(optionName, data);
+    var variants = (data.product && data.product.variants) || [];
+    var out = {
+      anyAvailable: false,
+      qty: 0,
+      hasQty: false,
+      priceFormatted: null,
+      onSale: false,
+    };
+    var first = true;
+    for (var v = 0; v < variants.length; v++) {
+      var opts = variants[v].options || [];
+      if (idx < 0 || norm(opts[idx]) !== norm(value)) continue;
+      var vr = variants[v];
+      if (first) {
+        out.priceFormatted = vr.priceFormatted;
+        out.onSale = !!(
+          vr.compareAtPrice != null &&
+          Number(vr.compareAtPrice) > Number(vr.price)
+        );
+        first = false;
+      }
+      if (vr.available) out.anyAvailable = true;
+      if (typeof vr.inventoryQuantity === "number") {
+        out.hasQty = true;
+        if (vr.inventoryQuantity > 0) out.qty += vr.inventoryQuantity;
+      }
+    }
+    // No matching variants (e.g. global-only render with a value not in data):
+    // treat as available so we never hide a legitimate option.
+    if (first) out.anyAvailable = true;
+    return out;
+  }
+
+  /* A single low-stock line whose text follows the selected value. */
+  function makeLowStock(values, settings) {
+    var el = document.createElement("div");
+    el.className = "swatchbox__lowstock";
+    el.hidden = true;
+    var byValue = {};
+    values.forEach(function (v) {
+      byValue[normName(v.value)] = v;
+    });
+    function update(value) {
+      var v = byValue[normName(value)];
+      var th = settings.lowStockThreshold || 0;
+      if (v && v.available && th > 0 && v.qty > 0 && v.qty <= th) {
+        el.textContent = (settings.lowStockMessage || "Only {qty} left!").replace(
+          "{qty}",
+          v.qty
+        );
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+    }
+    return { el: el, update: update };
+  }
+
+  /* Should this value be skipped (hidden) given OOS settings? */
+  function isHidden(v, settings) {
+    return !v.available && settings.oosBehavior === "HIDE";
+  }
+  /* Should this value be disabled given OOS settings? */
+  function isDisabled(v, settings) {
+    return !v.available && settings.oosBehavior === "DISABLE";
+  }
+
   /* Size-chart modal (lazy, removed on close / backdrop click). */
   function openSizeChart(url) {
     var existing = document.querySelector(".swatchbox__modal");
@@ -296,6 +370,7 @@
 
     var buttons = [];
     values.forEach(function (v) {
+      if (isHidden(v, settings)) return;
       var item = document.createElement("div");
       item.className = "swatchbox__item";
 
@@ -307,6 +382,10 @@
       btn.setAttribute("title", v.value);
       btn.style.setProperty("--sb-size", size + "px");
       btn.style.setProperty("--sb-radius", shapeRadius(shape, size));
+      if (isDisabled(v, settings)) {
+        btn.disabled = true;
+        btn.classList.add("is-unavailable");
+      }
 
       var fill = document.createElement("span");
       fill.className = "swatchbox__fill";
@@ -338,6 +417,9 @@
       buttons.push({ value: v.value, el: btn });
     });
 
+    var ls = makeLowStock(values, settings);
+    c.wrap.appendChild(ls.el);
+
     function setActive(value) {
       c.selectedSpan.textContent = value || "";
       buttons.forEach(function (b) {
@@ -345,6 +427,7 @@
         b.el.setAttribute("aria-pressed", on ? "true" : "false");
         b.el.classList.toggle("is-active", on);
       });
+      ls.update(value);
     }
 
     mount.parentNode.insertBefore(c.wrap, mount);
@@ -419,10 +502,15 @@
 
     var buttons = [];
     values.forEach(function (v) {
+      if (isHidden(v, settings)) return;
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "swatchbox__button";
       btn.setAttribute("data-value", v.value);
+      if (isDisabled(v, settings)) {
+        btn.disabled = true;
+        btn.classList.add("is-unavailable");
+      }
 
       var txt = document.createElement("span");
       txt.textContent = v.value;
@@ -448,6 +536,9 @@
       buttons.push({ value: v.value, el: btn });
     });
 
+    var ls = makeLowStock(values, settings);
+    c.wrap.appendChild(ls.el);
+
     function setActive(value) {
       c.selectedSpan.textContent = value || "";
       buttons.forEach(function (b) {
@@ -455,6 +546,7 @@
         b.el.setAttribute("aria-pressed", on ? "true" : "false");
         b.el.classList.toggle("is-active", on);
       });
+      ls.update(value);
     }
 
     mount.parentNode.insertBefore(c.wrap, mount);
@@ -485,11 +577,16 @@
 
     var items = [];
     values.forEach(function (v) {
+      if (isHidden(v, settings)) return;
       var li = document.createElement("li");
       var item = document.createElement("button");
       item.type = "button";
       item.className = "swatchbox__dd-item";
       item.setAttribute("data-value", v.value);
+      if (isDisabled(v, settings)) {
+        item.disabled = true;
+        item.classList.add("is-unavailable");
+      }
       if (v.hex || v.imageUrl) {
         var dot = document.createElement("span");
         dot.className = "swatchbox__dd-dot";
@@ -540,16 +637,20 @@
     });
     document.addEventListener("click", close);
 
+    var ls = makeLowStock(values, settings);
+
     function setActive(value) {
       current.textContent = value || "";
       items.forEach(function (it) {
         it.el.classList.toggle("is-active", norm(it.value) === norm(value));
       });
+      ls.update(value);
     }
 
     dd.appendChild(toggle);
     dd.appendChild(listEl);
     c.wrap.appendChild(dd);
+    c.wrap.appendChild(ls.el);
     mount.parentNode.insertBefore(c.wrap, mount);
     setActive(currentValue(control));
     syncOnChange(control, setActive);
@@ -612,6 +713,9 @@
       showLabels: !!g.showLabels,
       showBadges: g.showBadges !== false,
       sizeChartUrl: (data.config && data.config.sizeChartUrl) || null,
+      oosBehavior: g.oosBehavior || "NONE",
+      lowStockThreshold: g.lowStockThreshold || 0,
+      lowStockMessage: g.lowStockMessage || "Only {qty} left!",
     };
 
     var rendered = 0;
@@ -623,17 +727,13 @@
       var resolved = resolveValues(controlValues(control), spec, data);
       if (!resolved.length) return;
 
-      // Enrich each value with its variant's price + sale status.
+      // Enrich each value with aggregated price, sale status, availability + qty.
       resolved.forEach(function (rv) {
-        var variant = variantForValue(rv.value, spec.optionName, data);
-        if (variant) {
-          rv.priceFormatted = variant.priceFormatted;
-          rv.available = variant.available;
-          rv.onSale = !!(
-            variant.compareAtPrice != null &&
-            Number(variant.compareAtPrice) > Number(variant.price)
-          );
-        }
+        var agg = aggregateValue(rv.value, spec.optionName, data);
+        rv.priceFormatted = agg.priceFormatted;
+        rv.onSale = agg.onSale;
+        rv.available = agg.anyAvailable;
+        rv.qty = agg.qty;
       });
 
       var mount = mountPointFor(control);

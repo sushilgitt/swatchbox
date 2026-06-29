@@ -163,7 +163,33 @@ export async function compileGlobal(shop: string) {
     showPrice: settings?.showPrice ?? false,
     showLabels: settings?.showLabels ?? false,
     showBadges: settings?.showBadges ?? true,
+    oosBehavior: settings?.oosBehavior ?? "NONE",
+    lowStockThreshold: settings?.lowStockThreshold ?? 0,
+    lowStockMessage: settings?.lowStockMessage ?? "Only {qty} left!",
   };
+}
+
+/** Update the inventory behavior settings. */
+export async function updateInventorySettings(
+  shop: string,
+  inv: {
+    oosBehavior?: "HIDE" | "DISABLE" | "NONE";
+    lowStockThreshold?: number;
+    lowStockMessage?: string;
+  },
+): Promise<void> {
+  await prisma.shopSettings.update({
+    where: { shop },
+    data: {
+      ...(inv.oosBehavior ? { oosBehavior: inv.oosBehavior } : {}),
+      ...(typeof inv.lowStockThreshold === "number"
+        ? { lowStockThreshold: Math.max(0, inv.lowStockThreshold) }
+        : {}),
+      ...(typeof inv.lowStockMessage === "string"
+        ? { lowStockMessage: inv.lowStockMessage }
+        : {}),
+    },
+  });
 }
 
 /** Update the picker-metadata toggles (price / labels / badges). */
