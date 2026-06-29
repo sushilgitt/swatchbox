@@ -20,6 +20,11 @@ api_version = "2026-07"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+[app_proxy]
+url = "https://swatchbox.91.239.208.85.sslip.io/proxy"
+subpath = "swatchbox"
+prefix = "apps"
+
 [auth]
 redirect_urls = [
   "https://swatchbox.91.239.208.85.sslip.io/auth/callback",

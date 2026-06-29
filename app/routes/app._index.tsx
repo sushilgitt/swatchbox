@@ -29,13 +29,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = session.shop;
 
   // Lazily create settings + metafield definitions for this shop.
-  await ensureShopSetup(admin, shop);
+  const settings = await ensureShopSetup(admin, shop);
 
-  const configuredCount = await prisma.productConfig.count({ where: { shop } });
+  const [configuredCount, libraryCount] = await Promise.all([
+    prisma.productConfig.count({ where: { shop } }),
+    prisma.colorLibraryEntry.count({ where: { shop } }),
+  ]);
 
   const themeEditorUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
 
-  return { shop, configuredCount, themeEditorUrl };
+  return {
+    shop,
+    configuredCount,
+    libraryCount,
+    embedEnabled: settings.appEmbedEnabledCache,
+    themeEditorUrl,
+  };
 };
 
 function StepCard({
@@ -80,8 +89,10 @@ function StepCard({
 }
 
 export default function Index() {
-  const { configuredCount, themeEditorUrl } = useLoaderData<typeof loader>();
-  const hasConfigured = configuredCount > 0;
+  const { configuredCount, libraryCount, embedEnabled, themeEditorUrl } =
+    useLoaderData<typeof loader>();
+  const hasConfigured = configuredCount > 0 || libraryCount > 0;
+  const allDone = hasConfigured && embedEnabled;
 
   return (
     <Page>
@@ -123,10 +134,10 @@ export default function Index() {
                     }
                   />
                   <StepCard
-                    done={false}
+                    done={embedEnabled}
                     icon={ThemeEditIcon}
                     title="2. Enable the app embed in your theme"
-                    description="Toggle Swatchbox on in the theme editor so swatches render on your storefront."
+                    description="Toggle Swatchbox on in the theme editor, then confirm it in Settings."
                     action={
                       <Button url={themeEditorUrl} target="_blank">
                         Open theme editor
@@ -134,11 +145,15 @@ export default function Index() {
                     }
                   />
                   <StepCard
-                    done={false}
+                    done={allDone}
                     icon={ViewIcon}
                     title="3. View it on your storefront"
                     description="Open a configured product page and click the swatches to switch variants."
-                    action={null}
+                    action={
+                      <Button url="/app/settings" variant="plain">
+                        Settings
+                      </Button>
+                    }
                   />
                 </BlockStack>
               </BlockStack>

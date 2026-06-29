@@ -147,6 +147,70 @@ export async function saveProductConfig(
   return { ok: result.ok, syncStatus, error: result.error };
 }
 
+/** Persist the merchant's confirmation that the theme app embed is enabled. */
+export async function setAppEmbedEnabled(
+  shop: string,
+  enabled: boolean,
+): Promise<void> {
+  await prisma.shopSettings.update({
+    where: { shop },
+    data: { appEmbedEnabledCache: enabled },
+  });
+}
+
+export interface RepublishResult {
+  products: number;
+  ok: number;
+  failed: number;
+}
+
+/**
+ * Re-publish every stored setting to Shopify metafields: shop global + color
+ * library, then each product's config. Useful as a maintenance/repair action if
+ * metafields ever drift from the database.
+ */
+export async function republishAll(
+  admin: Admin,
+  shop: string,
+): Promise<RepublishResult> {
+  await publishShopConfig(admin, shop);
+
+  const configs = await prisma.productConfig.findMany({ where: { shop } });
+  let ok = 0;
+  let failed = 0;
+  for (const c of configs) {
+    try {
+      const compiled = JSON.parse(c.configJson);
+      const r = await setJsonMetafield(
+        admin,
+        c.productId,
+        METAFIELD_KEYS.productConfig,
+        compiled,
+      );
+      if (r.ok) {
+        ok++;
+        await prisma.productConfig.update({
+          where: { id: c.id },
+          data: {
+            metafieldSyncStatus: "SYNCED",
+            syncError: null,
+            publishedAt: new Date(),
+          },
+        });
+      } else {
+        failed++;
+        await prisma.productConfig.update({
+          where: { id: c.id },
+          data: { metafieldSyncStatus: "ERROR", syncError: r.error },
+        });
+      }
+    } catch (e) {
+      failed++;
+    }
+  }
+  return { products: configs.length, ok, failed };
+}
+
 /**
  * One-time per-shop setup: ensure settings row exists and metafield definitions
  * are created. Safe to call on every admin load (cheap + idempotent).

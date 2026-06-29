@@ -18,6 +18,42 @@
   "use strict";
 
   var INIT_FLAG = "swatchboxInit";
+  var PROXY = null; // {global, library} fetched from the app proxy fallback
+  var PROXY_TRIED = false;
+
+  /* Fallback: fetch global+library from the app proxy if not injected inline. */
+  function maybeProxy(data, rerun) {
+    if (PROXY || PROXY_TRIED) return;
+    if (!data || !(data.library === null || data.library === undefined)) return;
+    PROXY_TRIED = true;
+    try {
+      fetch("/apps/swatchbox/swatch-config", {
+        headers: { Accept: "application/json" },
+      })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (j) {
+          if (j) {
+            PROXY = j;
+            rerun();
+          }
+        })
+        .catch(function () {});
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function mergeProxy(data) {
+    if (data && PROXY) {
+      if (data.library === null || data.library === undefined) {
+        data.library = PROXY.library;
+      }
+      if (!data.global && PROXY.global) data.global = PROXY.global;
+    }
+    return data;
+  }
 
   var COLOR_GUESS = {
     white: "#ffffff", black: "#000000", grey: "#808080", gray: "#808080",
@@ -753,8 +789,9 @@
   }
 
   function run() {
-    var data = readData();
+    var data = mergeProxy(readData());
     if (!data) return;
+    maybeProxy(data, tick);
     if (!data.config && !(data.global && data.global.optionTypes)) return;
     findProductForms().forEach(function (form) {
       try {
@@ -974,8 +1011,10 @@
   }
 
   function runCollection() {
-    var data = readCollectionData();
-    if (!data || !data.global || !data.global.collectionSwatches) return;
+    var data = mergeProxy(readCollectionData());
+    if (!data) return;
+    maybeProxy(data, tick);
+    if (!data.global || !data.global.collectionSwatches) return;
     var products = data.products || {};
     var settings = {
       size: (data.settings && data.settings.size) || 36,
