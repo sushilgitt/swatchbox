@@ -114,6 +114,7 @@
       var sel = selects[i];
       var selName = norm(sel.getAttribute("name"));
       var byName =
+        selName === nameKey ||
         selName.indexOf("[" + nameKey + "]") !== -1 ||
         norm(sel.dataset ? sel.dataset.optionName : "") === nameKey;
       var optVals = Array.prototype.map.call(sel.options, function (o) {
@@ -522,12 +523,17 @@
   }
 
   function syncOnChange(control, setActive) {
-    var syncEl = control.kind === "select" ? control.el : control.inputs[0].form;
-    if (syncEl) {
-      syncEl.addEventListener("change", function () {
-        setActive(currentValue(control));
-      });
-    }
+    var el = control.kind === "select" ? control.el : control.inputs[0];
+    // Dawn dispatches change on the radios/select inside <variant-selects>,
+    // which is outside the cart <form> — listen on the nearest real container.
+    var container =
+      (el.closest &&
+        el.closest("variant-selects, variant-radios, fieldset, form")) ||
+      el.parentNode ||
+      document;
+    container.addEventListener("change", function () {
+      setActive(currentValue(control));
+    });
   }
 
   function buildButtons(optionName, values, settings, control, mount) {
@@ -735,8 +741,8 @@
     );
   }
 
-  function renderForm(form, data) {
-    if (form[INIT_FLAG]) return;
+  function renderForm(root, data) {
+    if (root[INIT_FLAG]) return;
     var specs = getSpecs(data);
     if (!specs.length) return;
 
@@ -757,7 +763,7 @@
     var rendered = 0;
     specs.forEach(function (spec) {
       var wanted = spec.explicit ? Object.keys(spec.explicit) : [];
-      var control = findOptionControl(form, spec.optionName, wanted);
+      var control = findOptionControl(root, spec.optionName, wanted);
       if (!control) return;
 
       var resolved = resolveValues(controlValues(control), spec, data);
@@ -785,7 +791,33 @@
       rendered++;
     });
 
-    if (rendered > 0) form[INIT_FLAG] = true;
+    if (rendered > 0) root[INIT_FLAG] = true;
+  }
+
+  /*
+   * The scope(s) to search for variant controls. Critically, in Dawn / OS 2.0
+   * the variant inputs live in <variant-selects> (or <variant-radios>) which is
+   * OUTSIDE the cart <form>, so searching the form alone finds nothing. Prefer
+   * those web components; fall back to the product section, then the form, then
+   * the whole document.
+   */
+  function findRoots() {
+    var roots = [];
+    var vs = document.querySelectorAll("variant-selects, variant-radios");
+    if (vs.length) {
+      Array.prototype.forEach.call(vs, function (el) {
+        roots.push(el);
+      });
+      return roots;
+    }
+    findProductForms().forEach(function (form) {
+      var scope =
+        form.closest(".product, .product__info-wrapper, .product__info-container, section") ||
+        form;
+      if (roots.indexOf(scope) === -1) roots.push(scope);
+    });
+    if (!roots.length) roots.push(document.body || document);
+    return roots;
   }
 
   function run() {
@@ -793,9 +825,9 @@
     if (!data) return;
     maybeProxy(data, tick);
     if (!data.config && !(data.global && data.global.optionTypes)) return;
-    findProductForms().forEach(function (form) {
+    findRoots().forEach(function (root) {
       try {
-        renderForm(form, data);
+        renderForm(root, data);
       } catch (e) {
         /* never break the storefront */
       }
