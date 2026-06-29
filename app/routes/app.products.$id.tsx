@@ -26,12 +26,15 @@ import {
   type SwatchValueConfig,
 } from "../models/swatch.server";
 import { guessHex, isHex } from "../lib/colorNames";
+import { getPlanStatus } from "../models/billing.server";
+import { isFreeDisplayType } from "../lib/plans";
 
 const toGid = (id: string) => `gid://shopify/Product/${id}`;
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
   const productGid = toGid(params.id!);
+  const { isPro } = await getPlanStatus(billing);
 
   const res = await admin.graphql(
     `#graphql
@@ -55,12 +58,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const existing = parseConfig(await getProductConfig(session.shop, productGid));
-  return { product, existing };
+  return { product, existing, isPro };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
   const productGid = toGid(params.id!);
+  const { isPro } = await getPlanStatus(billing);
   const form = await request.formData();
   const payload = JSON.parse(String(form.get("payload"))) as {
     swatchOption: string;
@@ -69,11 +73,20 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     sizeChartUrl?: string | null;
   };
 
+  // Free plan can only use color / variant-image and no size chart.
+  if (!isPro && !isFreeDisplayType(payload.displayType)) {
+    return {
+      ok: false,
+      syncStatus: "ERROR" as const,
+      error: "This display type requires the Pro plan.",
+    };
+  }
+
   const result = await saveProductConfig(admin, session.shop, productGid, {
     swatchOption: payload.swatchOption,
     displayType: payload.displayType,
     values: payload.values,
-    sizeChartUrl: payload.sizeChartUrl?.trim() || null,
+    sizeChartUrl: isPro ? payload.sizeChartUrl?.trim() || null : null,
   });
 
   return result;
@@ -224,16 +237,20 @@ function ImageRow({
 
 const DISPLAY_OPTIONS: { label: string; value: SwatchDisplayType }[] = [
   { label: "Color swatches", value: "color" },
-  { label: "Image swatches", value: "image" },
   { label: "Variant image", value: "variant_image" },
-  { label: "Buttons", value: "button" },
-  { label: "Dropdown", value: "dropdown" },
+  { label: "Image swatches (Pro)", value: "image" },
+  { label: "Buttons (Pro)", value: "button" },
+  { label: "Dropdown (Pro)", value: "dropdown" },
 ];
 
 export default function ProductEditor() {
-  const { product, existing } = useLoaderData<typeof loader>();
+  const { product, existing, isPro } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
+
+  const displayOptions = isPro
+    ? DISPLAY_OPTIONS
+    : DISPLAY_OPTIONS.filter((o) => isFreeDisplayType(o.value));
 
   const options: { name: string; values: string[] }[] = product.options.map(
     (o: { name: string; optionValues: { name: string }[] }) => ({
@@ -400,21 +417,23 @@ export default function ProductEditor() {
               <Box minWidth="240px">
                 <Select
                   label="Display type"
-                  options={DISPLAY_OPTIONS}
+                  options={displayOptions}
                   value={displayType}
                   onChange={(v) => setDisplayType(v as SwatchDisplayType)}
                 />
               </Box>
             </InlineStack>
 
-            <TextField
-              label="Size chart URL (optional)"
-              value={sizeChartUrl}
-              onChange={setSizeChartUrl}
-              autoComplete="off"
-              placeholder="https://…"
-              helpText="Shows a “Size chart” link next to the swatches that opens this page."
-            />
+            {isPro && (
+              <TextField
+                label="Size chart URL (optional)"
+                value={sizeChartUrl}
+                onChange={setSizeChartUrl}
+                autoComplete="off"
+                placeholder="https://…"
+                helpText="Shows a “Size chart” link next to the swatches that opens this page."
+              />
+            )}
           </BlockStack>
         </Card>
 

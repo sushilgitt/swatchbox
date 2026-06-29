@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useFetcher } from "@remix-run/react";
+import { useFetcher, useLoaderData } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -18,14 +18,19 @@ import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { parseCsv, mapLibraryRows } from "../lib/csv";
 import { importLibraryRows } from "../models/library.server";
+import { getPlanStatus, requirePro } from "../models/billing.server";
+import { ProUpsell } from "../components/ProUpsell";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-  return null;
+  const { billing } = await authenticate.admin(request);
+  const { isPro } = await getPlanStatus(billing);
+  return { isPro };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+  const gate = await requirePro(billing);
+  if (gate) return { ok: false, error: "Pro feature", imported: 0, invalid: 0 };
   const form = await request.formData();
   const text = String(form.get("csv") || "");
   const fileName = String(form.get("fileName") || "import.csv");
@@ -49,6 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ImportCsv() {
+  const { isPro } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
 
@@ -77,6 +83,10 @@ export default function ImportCsv() {
       shopify.toast.show(`Imported ${fetcher.data.imported} colors`);
     }
   }, [fetcher.state, fetcher.data, shopify]);
+
+  if (!isPro) {
+    return <ProUpsell title="Import colors" feature="CSV import" />;
+  }
 
   const previewRows =
     preview?.valid.slice(0, 8).map((r) => [

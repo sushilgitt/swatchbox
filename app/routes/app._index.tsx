@@ -22,18 +22,20 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { ensureShopSetup } from "../models/swatch.server";
+import { getPlanStatus } from "../models/billing.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
   const shop = session.shop;
 
   // Lazily create settings + metafield definitions for this shop.
   const settings = await ensureShopSetup(admin, shop);
 
-  const [configuredCount, libraryCount] = await Promise.all([
+  const [configuredCount, libraryCount, plan] = await Promise.all([
     prisma.productConfig.count({ where: { shop } }),
     prisma.colorLibraryEntry.count({ where: { shop } }),
+    getPlanStatus(billing),
   ]);
 
   const themeEditorUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
@@ -43,6 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     configuredCount,
     libraryCount,
     embedEnabled: settings.appEmbedEnabledCache,
+    isPro: plan.isPro,
     themeEditorUrl,
   };
 };
@@ -89,7 +92,7 @@ function StepCard({
 }
 
 export default function Index() {
-  const { configuredCount, libraryCount, embedEnabled, themeEditorUrl } =
+  const { configuredCount, libraryCount, embedEnabled, isPro, themeEditorUrl } =
     useLoaderData<typeof loader>();
   const hasConfigured = configuredCount > 0 || libraryCount > 0;
   const allDone = hasConfigured && embedEnabled;
@@ -162,6 +165,33 @@ export default function Index() {
 
           <Layout.Section variant="oneThird">
             <BlockStack gap="500">
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      Your plan
+                    </Text>
+                    <Badge tone={isPro ? "success" : undefined}>
+                      {isPro ? "Pro" : "Free"}
+                    </Badge>
+                  </InlineStack>
+                  {isPro ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      All features unlocked. Thanks for being a Pro!
+                    </Text>
+                  ) : (
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Unlock image swatches, buttons, badges, inventory rules and
+                        collection swatches for $5/month.
+                      </Text>
+                      <Button url="/app/billing" variant="primary">
+                        Upgrade to Pro
+                      </Button>
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
               <Card>
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">

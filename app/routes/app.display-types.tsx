@@ -14,6 +14,7 @@ import {
   Box,
   Divider,
   Checkbox,
+  Badge,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -25,14 +26,19 @@ import {
   publishGlobal,
 } from "../models/library.server";
 import { getOrCreateShopSettings } from "../models/swatch.server";
+import { getPlanStatus } from "../models/billing.server";
+import { isFreeDisplayType } from "../lib/plans";
 
-const DISPLAY_OPTIONS = [
+const DISPLAY_OPTIONS_ALL = [
   { label: "Color swatches", value: "color" },
-  { label: "Image swatches", value: "image" },
   { label: "Variant image", value: "variant_image" },
-  { label: "Buttons", value: "button" },
-  { label: "Dropdown", value: "dropdown" },
+  { label: "Image swatches (Pro)", value: "image" },
+  { label: "Buttons (Pro)", value: "button" },
+  { label: "Dropdown (Pro)", value: "dropdown" },
 ];
+const DISPLAY_OPTIONS_FREE = DISPLAY_OPTIONS_ALL.filter((o) =>
+  isFreeDisplayType(o.value),
+);
 
 const SHAPE_OPTIONS = [
   { label: "Circle", value: "circle" },
@@ -41,13 +47,15 @@ const SHAPE_OPTIONS = [
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
-  const [mappings, settings] = await Promise.all([
+  const [mappings, settings, plan] = await Promise.all([
     getOptionTypeMappings(shop),
     getOrCreateShopSettings(shop),
+    getPlanStatus(billing),
   ]);
   return {
+    isPro: plan.isPro,
     mappings: mappings.map((m) => ({
       optionName: m.optionName,
       displayType: m.displayType as string,
@@ -61,8 +69,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
   const shop = session.shop;
+  const { isPro } = await getPlanStatus(billing);
   const form = await request.formData();
   const payload = JSON.parse(String(form.get("payload"))) as {
     mappings: { optionName: string; displayType: string }[];
@@ -73,18 +82,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     showBadges: boolean;
   };
 
+  // On Free, drop Pro display types and force metadata toggles off.
+  const mappings = payload.mappings.filter(
+    (m) => isPro || isFreeDisplayType(m.displayType),
+  );
+
   await setOptionTypeMappings(
     shop,
-    payload.mappings.map((m) => ({
+    mappings.map((m) => ({
       optionName: m.optionName,
       displayType: m.displayType as never,
     })),
   );
   await updateSwatchStyle(shop, { shape: payload.shape, size: payload.size });
   await updateMetadataSettings(shop, {
-    showPrice: payload.showPrice,
-    showLabels: payload.showLabels,
-    showBadges: payload.showBadges,
+    showPrice: isPro ? payload.showPrice : false,
+    showLabels: isPro ? payload.showLabels : false,
+    showBadges: isPro ? payload.showBadges : false,
   });
   await publishGlobal(admin, shop);
   return { ok: true };
@@ -103,6 +117,10 @@ export default function DisplayTypes() {
   const [showPrice, setShowPrice] = useState(data.showPrice);
   const [showLabels, setShowLabels] = useState(data.showLabels);
   const [showBadges, setShowBadges] = useState(data.showBadges);
+
+  const displayOptions = data.isPro
+    ? DISPLAY_OPTIONS_ALL
+    : DISPLAY_OPTIONS_FREE;
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
@@ -181,7 +199,7 @@ export default function DisplayTypes() {
                       <Select
                         label="Display type"
                         labelHidden={i > 0}
-                        options={DISPLAY_OPTIONS}
+                        options={displayOptions}
                         value={m.displayType}
                         onChange={(v) => updateMapping(i, { displayType: v })}
                       />
@@ -248,29 +266,36 @@ export default function DisplayTypes() {
 
         <Card>
           <BlockStack gap="400">
-            <BlockStack gap="100">
+            <InlineStack align="space-between" blockAlign="center">
               <Text as="h2" variant="headingMd">
                 Labels, price &amp; badges
               </Text>
-              <Text as="p" tone="subdued" variant="bodySm">
-                Extra details shown alongside each swatch on your storefront.
-              </Text>
-            </BlockStack>
-            <Checkbox
-              label="Show the value name under each swatch"
-              checked={showLabels}
-              onChange={setShowLabels}
-            />
-            <Checkbox
-              label="Show each option's price"
-              checked={showPrice}
-              onChange={setShowPrice}
-            />
-            <Checkbox
-              label="Show a Sale badge on discounted options"
-              checked={showBadges}
-              onChange={setShowBadges}
-            />
+              {!data.isPro && <Badge tone="info">Pro</Badge>}
+            </InlineStack>
+            <Text as="p" tone="subdued" variant="bodySm">
+              Extra details shown alongside each swatch on your storefront.
+            </Text>
+            {data.isPro ? (
+              <BlockStack gap="300">
+                <Checkbox
+                  label="Show the value name under each swatch"
+                  checked={showLabels}
+                  onChange={setShowLabels}
+                />
+                <Checkbox
+                  label="Show each option's price"
+                  checked={showPrice}
+                  onChange={setShowPrice}
+                />
+                <Checkbox
+                  label="Show a Sale badge on discounted options"
+                  checked={showBadges}
+                  onChange={setShowBadges}
+                />
+              </BlockStack>
+            ) : (
+              <Button url="/app/billing">Upgrade to Pro to enable</Button>
+            )}
           </BlockStack>
         </Card>
       </BlockStack>

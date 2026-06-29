@@ -6,13 +6,22 @@ import {
 } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { uploadImageToShopifyFiles } from "../models/files.server";
+import { getPlanStatus } from "../models/billing.server";
 
 /**
  * Resource route for image-swatch uploads. The embedded admin posts a single
  * `file` field here; App Bridge attaches the session token to the request.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, billing } = await authenticate.admin(request);
+
+  const { isPro } = await getPlanStatus(billing);
+  if (!isPro) {
+    return json(
+      { ok: false, error: "Image swatches are a Pro feature.", upgrade: true },
+      { status: 402 },
+    );
+  }
 
   const uploadHandler = unstable_createMemoryUploadHandler({
     maxPartSize: 8_000_000, // 8 MB

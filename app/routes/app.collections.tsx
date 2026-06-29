@@ -15,18 +15,26 @@ import {
   publishGlobal,
 } from "../models/library.server";
 import { getOrCreateShopSettings } from "../models/swatch.server";
+import { getPlanStatus, requirePro } from "../models/billing.server";
+import { ProUpsell } from "../components/ProUpsell";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const s = await getOrCreateShopSettings(session.shop);
+  const { session, billing } = await authenticate.admin(request);
+  const [s, plan] = await Promise.all([
+    getOrCreateShopSettings(session.shop),
+    getPlanStatus(billing),
+  ]);
   return {
+    isPro: plan.isPro,
     collectionSwatchesEnabled: s.collectionSwatchesEnabled,
     splitByVariant: s.splitByVariant,
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+  const gate = await requirePro(billing);
+  if (gate) return gate;
   const shop = session.shop;
   const form = await request.formData();
   const payload = JSON.parse(String(form.get("payload"))) as {
@@ -65,6 +73,10 @@ export default function Collections() {
   };
 
   const saving = fetcher.state !== "idle";
+
+  if (!data.isPro) {
+    return <ProUpsell title="Collections" feature="Collection swatches" />;
+  }
 
   return (
     <Page>
