@@ -765,13 +765,254 @@
     });
   }
 
-  function boot() {
-    run();
-    var mo = new MutationObserver(function () {
-      run();
+  // ---------------------------------------------------------------------------
+  // Collection / search pages: mini-swatches on product cards.
+  // ---------------------------------------------------------------------------
+
+  function readCollectionData() {
+    var el = document.getElementById("swatchbox-collection");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function resolveColorValue(value, opt, data) {
+    var key = normName(value);
+    if (opt.explicit && opt.explicit[key]) {
+      var ex = opt.explicit[key];
+      return { hex: ex.hex, imageUrl: ex.imageUrl, type: ex.type };
+    }
+    var lib = data.library && data.library[key];
+    if (lib && (lib.hex || lib.imageUrl)) {
+      return { hex: lib.hex, imageUrl: lib.imageUrl };
+    }
+    return { hex: guessHex(value) };
+  }
+
+  /* Pick the option to show as swatches on a card (config first, then global). */
+  function cardSwatchOption(prod, data) {
+    if (prod.config && prod.config.swatchOption) {
+      var explicit = {};
+      (prod.config.values || []).forEach(function (v) {
+        explicit[normName(v.value)] = v;
+      });
+      return {
+        name: prod.config.swatchOption,
+        type: prod.config.displayType || "color",
+        explicit: explicit,
+      };
+    }
+    var ots = (data.global && data.global.optionTypes) || [];
+    var names = prod.optionNames || [];
+    for (var i = 0; i < ots.length; i++) {
+      var ot = ots[i];
+      if (!ot || !ot.name || !ot.type) continue;
+      if (ot.type === "button" || ot.type === "dropdown") continue;
+      for (var j = 0; j < names.length; j++) {
+        if (norm(names[j]) === norm(ot.name)) {
+          return { name: ot.name, type: ot.type, explicit: null };
+        }
+      }
+    }
+    return null;
+  }
+
+  /* Distinct values of the swatch option, each with a representative variant. */
+  function cardValues(prod, opt, data) {
+    var names = prod.optionNames || [];
+    var idx = -1;
+    for (var i = 0; i < names.length; i++) {
+      if (norm(names[i]) === norm(opt.name)) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) return [];
+    var seen = {};
+    var out = [];
+    (prod.variants || []).forEach(function (v) {
+      var val = (v.options || [])[idx];
+      if (val == null) return;
+      var key = normName(val);
+      if (seen[key]) return;
+      seen[key] = true;
+      var rc = resolveColorValue(val, opt, data);
+      var img = null;
+      if (opt.type === "variant_image" || opt.type === "image") {
+        img = v.featuredImage || rc.imageUrl || null;
+      } else {
+        img = rc.imageUrl || null;
+      }
+      out.push({
+        value: val,
+        hex: rc.hex,
+        imageUrl: img,
+        variantId: v.id,
+        available: v.available,
+        cardImage: v.featuredImage || null,
+      });
     });
+    return out;
+  }
+
+  function findCards() {
+    var nodes = document.querySelectorAll(".card-wrapper");
+    if (!nodes.length) nodes = document.querySelectorAll("li.grid__item, .grid__item");
+    if (!nodes.length) nodes = document.querySelectorAll("[data-product-card]");
+    return Array.prototype.slice.call(nodes);
+  }
+
+  function cardHandle(card) {
+    var a = card.querySelector('a[href*="/products/"]');
+    if (!a) return null;
+    var m = (a.getAttribute("href") || "").match(/\/products\/([^/?#]+)/);
+    return m ? m[1] : null;
+  }
+
+  function makeCardSwatches(prod, values, settings) {
+    var size = Math.min(settings.size || 28, 26);
+    var container = document.createElement("div");
+    container.className = "swatchbox-card";
+    values.forEach(function (v) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatchbox-card__swatch";
+      b.title = v.value;
+      b.setAttribute("aria-label", v.value);
+      b.style.setProperty("--sb-size", size + "px");
+      var fill = document.createElement("span");
+      fill.className = "swatchbox-card__fill";
+      if (v.imageUrl) {
+        fill.style.backgroundImage = "url(" + v.imageUrl + ")";
+        fill.style.backgroundSize = "cover";
+      } else if (v.hex) {
+        fill.style.background = v.hex;
+      }
+      b.appendChild(fill);
+      container.appendChild(b);
+    });
+    return container;
+  }
+
+  function renderCard(card, prod, data, settings) {
+    if (card.swatchboxDone) return;
+    var opt = cardSwatchOption(prod, data);
+    if (!opt) return;
+    var values = cardValues(prod, opt, data);
+    if (values.length < 2) {
+      card.swatchboxDone = true;
+      return;
+    }
+    var img = card.querySelector("img");
+    var link = card.querySelector('a[href*="/products/"]');
+    var container = makeCardSwatches(prod, values, settings);
+
+    container.querySelectorAll(".swatchbox-card__swatch").forEach(function (b, i) {
+      var v = values[i];
+      b.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (img && v.cardImage) img.src = v.cardImage;
+        if (link && v.variantId) link.href = prod.url + "?variant=" + v.variantId;
+        container
+          .querySelectorAll(".swatchbox-card__swatch")
+          .forEach(function (el) {
+            el.classList.remove("is-active");
+          });
+        b.classList.add("is-active");
+      });
+    });
+
+    var host =
+      card.querySelector(".card__content") ||
+      card.querySelector(".card-information") ||
+      card;
+    host.appendChild(container);
+    card.swatchboxDone = true;
+  }
+
+  /* Experimental: clone the card per color value (off by default). */
+  function splitCard(card, prod, data, settings) {
+    var opt = cardSwatchOption(prod, data);
+    if (!opt) return false;
+    var values = cardValues(prod, opt, data);
+    if (values.length < 2) return false;
+
+    var clones = [];
+    for (var i = 1; i < values.length; i++) {
+      var clone = card.cloneNode(true);
+      clone.swatchboxDone = true;
+      applyValueToCard(clone, prod, values[i]);
+      clones.push(clone);
+    }
+    applyValueToCard(card, prod, values[0]);
+    card.swatchboxDone = true;
+
+    var anchor = card;
+    clones.forEach(function (clone) {
+      if (anchor.nextSibling) {
+        anchor.parentNode.insertBefore(clone, anchor.nextSibling);
+      } else {
+        anchor.parentNode.appendChild(clone);
+      }
+      anchor = clone;
+    });
+    return true;
+  }
+
+  function applyValueToCard(card, prod, v) {
+    var img = card.querySelector("img");
+    var link = card.querySelector('a[href*="/products/"]');
+    if (img && v.cardImage) {
+      img.src = v.cardImage;
+      img.removeAttribute("srcset");
+    }
+    if (link && v.variantId) link.href = prod.url + "?variant=" + v.variantId;
+  }
+
+  function runCollection() {
+    var data = readCollectionData();
+    if (!data || !data.global || !data.global.collectionSwatches) return;
+    var products = data.products || {};
+    var settings = {
+      size: (data.settings && data.settings.size) || 36,
+      shape: (data.settings && data.settings.shape) || "circle",
+    };
+    var split = !!data.global.splitByVariant;
+
+    findCards().forEach(function (card) {
+      try {
+        if (card.swatchboxDone) return;
+        var handle = cardHandle(card);
+        if (!handle) return;
+        var prod = products[handle];
+        if (!prod) return;
+        if (split) {
+          if (!splitCard(card, prod, data, settings)) {
+            renderCard(card, prod, data, settings);
+          }
+        } else {
+          renderCard(card, prod, data, settings);
+        }
+      } catch (e) {
+        /* never break the storefront */
+      }
+    });
+  }
+
+  function tick() {
+    run();
+    runCollection();
+  }
+
+  function boot() {
+    tick();
+    var mo = new MutationObserver(tick);
     mo.observe(document.body, { childList: true, subtree: true });
-    document.addEventListener("shopify:section:load", run);
+    document.addEventListener("shopify:section:load", tick);
   }
 
   if (document.readyState === "loading") {

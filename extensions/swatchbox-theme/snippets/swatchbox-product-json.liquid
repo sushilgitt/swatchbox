@@ -1,0 +1,19 @@
+{%- comment -%}
+  Emits one product's swatch data as a JSON object. `p` is the product.
+  Kept compact (only what the card renderer needs) to limit page weight.
+{%- endcomment -%}
+{
+  "url": {{ p.url | json }},
+  "optionNames": {{ p.options | json }},
+  "config": {{ p.metafields["$app:swatchbox"].config.value | json }},
+  "variants": [
+    {%- for v in p.variants -%}
+    {
+      "id": {{ v.id | json }},
+      "options": {{ v.options | json }},
+      "available": {{ v.available | json }},
+      "featuredImage": {{ v.featured_image.src | json }}
+    }{%- unless forloop.last -%},{%- endunless -%}
+    {%- endfor -%}
+  ]
+}

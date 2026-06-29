@@ -1,0 +1,37 @@
+{%- comment -%}
+  Injects swatch data for the products on a collection or search page, keyed by
+  product handle. Read directly from Liquid — the card renderer in swatchbox.js
+  matches each product card to this data by handle.
+{%- endcomment -%}
+
+{%- liquid
+  assign sb_global = shop.metafields["$app:swatchbox"].global.value
+  assign sb_library = shop.metafields["$app:swatchbox"].color_library.value
+-%}
+
+<script id="swatchbox-collection" type="application/json">
+{
+  "settings": {
+    "shape": {{ shape | default: 'circle' | json }},
+    "size": {{ size | default: 36 | json }}
+  },
+  "global": {{ sb_global | json }},
+  "library": {{ sb_library | json }},
+  "products": {
+    {%- assign sb_first = true -%}
+    {%- if collection -%}
+      {%- for p in collection.products -%}
+        {%- unless sb_first %},{% endunless -%}{%- assign sb_first = false -%}
+        {{ p.handle | json }}: {% render 'swatchbox-product-json', p: p %}
+      {%- endfor -%}
+    {%- elsif search -%}
+      {%- for item in search.results -%}
+        {%- if item.object_type == 'product' -%}
+          {%- unless sb_first %},{% endunless -%}{%- assign sb_first = false -%}
+          {{ item.handle | json }}: {% render 'swatchbox-product-json', p: item %}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+  }
+}
+</script>

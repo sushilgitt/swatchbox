@@ -166,7 +166,27 @@ export async function compileGlobal(shop: string) {
     oosBehavior: settings?.oosBehavior ?? "NONE",
     lowStockThreshold: settings?.lowStockThreshold ?? 0,
     lowStockMessage: settings?.lowStockMessage ?? "Only {qty} left!",
+    collectionSwatches: settings?.collectionSwatchesEnabled ?? false,
+    splitByVariant: settings?.splitByVariant ?? false,
   };
+}
+
+/** Update the collection/search swatch settings. */
+export async function updateCollectionSettings(
+  shop: string,
+  c: { collectionSwatchesEnabled?: boolean; splitByVariant?: boolean },
+): Promise<void> {
+  await prisma.shopSettings.update({
+    where: { shop },
+    data: {
+      ...(typeof c.collectionSwatchesEnabled === "boolean"
+        ? { collectionSwatchesEnabled: c.collectionSwatchesEnabled }
+        : {}),
+      ...(typeof c.splitByVariant === "boolean"
+        ? { splitByVariant: c.splitByVariant }
+        : {}),
+    },
+  });
 }
 
 /** Update the inventory behavior settings. */

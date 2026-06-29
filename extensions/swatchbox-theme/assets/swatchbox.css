@@ -315,6 +315,47 @@
   color: #b98900;
 }
 
+/* ---- Collection / search card mini-swatches ---- */
+.swatchbox-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.swatchbox-card__swatch {
+  --sb-size: 24px;
+  width: var(--sb-size);
+  height: var(--sb-size);
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 0;
+  transition: transform 0.1s ease;
+}
+
+.swatchbox-card__swatch:hover {
+  transform: scale(1.1);
+}
+
+.swatchbox-card__fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #f0f0f0 center/cover no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.swatchbox-card__swatch.is-active .swatchbox-card__fill {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 0 0 2px #fff,
+    0 0 0 3px rgba(var(--color-foreground, 18, 18, 18), 0.9);
+}
+
 /* Keep the native control hidden but accessible to the theme's variant JS. */
 [data-swatchbox-hidden="true"] {
   display: none !important;

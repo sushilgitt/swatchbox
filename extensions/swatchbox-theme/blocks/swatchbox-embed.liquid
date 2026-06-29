@@ -6,10 +6,14 @@
 {% endcomment %}
 
 {% if block.settings.enabled %}
-  {%- if product -%}
+  {%- if product or collection or search -%}
     {{ 'swatchbox.css' | asset_url | stylesheet_tag }}
 
-    {% render 'swatchbox-config', shape: block.settings.shape, size: block.settings.size, show_price: block.settings.show_price %}
+    {%- if product -%}
+      {% render 'swatchbox-config', shape: block.settings.shape, size: block.settings.size, show_price: block.settings.show_price %}
+    {%- elsif collection or search -%}
+      {% render 'swatchbox-collection', shape: block.settings.shape, size: block.settings.size %}
+    {%- endif -%}
 
     <script src="{{ 'swatchbox.js' | asset_url }}" defer></script>
   {%- endif -%}
