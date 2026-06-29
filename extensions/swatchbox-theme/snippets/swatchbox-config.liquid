@@ -35,6 +35,8 @@
         "available": {{ v.available | json }},
         "inventoryQuantity": {{ v.inventory_quantity | json }},
         "price": {{ v.price | json }},
+        "priceFormatted": {{ v.price | money | json }},
+        "compareAtPrice": {{ v.compare_at_price | json }},
         "options": {{ v.options | json }},
         "featuredImage": {{ v.featured_image.src | json }}
       }{%- unless forloop.last -%},{%- endunless -%}

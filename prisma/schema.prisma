@@ -87,6 +87,7 @@ model ShopSettings {
   lowStockThreshold         Int         @default(0)
   lowStockMessage           String      @default("Only {qty} left!")
   showPrice                 Boolean     @default(false)
+  showLabels                Boolean     @default(false)
   showBadges                Boolean     @default(true)
   collectionSwatchesEnabled Boolean     @default(false)
   splitByVariant            Boolean     @default(false)

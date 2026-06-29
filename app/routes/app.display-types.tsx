@@ -13,6 +13,7 @@ import {
   RangeSlider,
   Box,
   Divider,
+  Checkbox,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -20,6 +21,7 @@ import {
   getOptionTypeMappings,
   setOptionTypeMappings,
   updateSwatchStyle,
+  updateMetadataSettings,
   publishGlobal,
 } from "../models/library.server";
 import { getOrCreateShopSettings } from "../models/swatch.server";
@@ -52,6 +54,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
     shape: settings.swatchShape,
     size: settings.swatchSize,
+    showPrice: settings.showPrice,
+    showLabels: settings.showLabels,
+    showBadges: settings.showBadges,
   };
 };
 
@@ -63,6 +68,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     mappings: { optionName: string; displayType: string }[];
     shape: string;
     size: number;
+    showPrice: boolean;
+    showLabels: boolean;
+    showBadges: boolean;
   };
 
   await setOptionTypeMappings(
@@ -73,6 +81,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     })),
   );
   await updateSwatchStyle(shop, { shape: payload.shape, size: payload.size });
+  await updateMetadataSettings(shop, {
+    showPrice: payload.showPrice,
+    showLabels: payload.showLabels,
+    showBadges: payload.showBadges,
+  });
   await publishGlobal(admin, shop);
   return { ok: true };
 };
@@ -87,6 +100,9 @@ export default function DisplayTypes() {
   const [mappings, setMappings] = useState<Mapping[]>(data.mappings);
   const [shape, setShape] = useState(data.shape);
   const [size, setSize] = useState<number>(data.size);
+  const [showPrice, setShowPrice] = useState(data.showPrice);
+  const [showLabels, setShowLabels] = useState(data.showLabels);
+  const [showBadges, setShowBadges] = useState(data.showBadges);
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
@@ -103,7 +119,16 @@ export default function DisplayTypes() {
 
   const save = () => {
     fetcher.submit(
-      { payload: JSON.stringify({ mappings, shape, size }) },
+      {
+        payload: JSON.stringify({
+          mappings,
+          shape,
+          size,
+          showPrice,
+          showLabels,
+          showBadges,
+        }),
+      },
       { method: "POST" },
     );
   };
@@ -218,6 +243,34 @@ export default function DisplayTypes() {
             <Text as="p" tone="subdued" variant="bodySm">
               Shape and size apply to color and image swatches on your storefront.
             </Text>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd">
+                Labels, price &amp; badges
+              </Text>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Extra details shown alongside each swatch on your storefront.
+              </Text>
+            </BlockStack>
+            <Checkbox
+              label="Show the value name under each swatch"
+              checked={showLabels}
+              onChange={setShowLabels}
+            />
+            <Checkbox
+              label="Show each option's price"
+              checked={showPrice}
+              onChange={setShowPrice}
+            />
+            <Checkbox
+              label="Show a Sale badge on discounted options"
+              checked={showBadges}
+              onChange={setShowBadges}
+            />
           </BlockStack>
         </Card>
       </BlockStack>

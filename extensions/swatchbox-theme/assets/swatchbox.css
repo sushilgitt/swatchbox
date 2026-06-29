@@ -63,6 +63,120 @@
     0 0 0 4px rgba(var(--color-foreground, 18, 18, 18), 0.9);
 }
 
+/* ---- Item / caption / badge (metadata) ---- */
+.swatchbox__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.swatchbox__caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.swatchbox__cap-name {
+  font-size: 0.78rem;
+}
+
+.swatchbox__cap-price {
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.swatchbox__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: #d72c0d;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.swatchbox__badge--inline {
+  position: static;
+  margin-left: 6px;
+}
+
+.swatchbox__sizechart {
+  margin-left: 0.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgb(var(--color-foreground, 18, 18, 18));
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.swatchbox__btn-price {
+  margin-left: 6px;
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+
+.swatchbox__dd-name {
+  flex: 1 1 auto;
+}
+
+.swatchbox__dd-price {
+  opacity: 0.65;
+  font-size: 0.88em;
+}
+
+/* ---- Size-chart modal ---- */
+.swatchbox__modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 4vmin;
+}
+
+.swatchbox__modal-box {
+  position: relative;
+  width: min(900px, 96vw);
+  height: min(80vh, 900px);
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.swatchbox__modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.swatchbox__modal-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 /* ---- Buttons ---- */
 .swatchbox__buttons {
   display: flex;

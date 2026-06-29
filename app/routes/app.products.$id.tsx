@@ -66,12 +66,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     swatchOption: string;
     displayType: SwatchDisplayType;
     values: SwatchValueConfig[];
+    sizeChartUrl?: string | null;
   };
 
   const result = await saveProductConfig(admin, session.shop, productGid, {
     swatchOption: payload.swatchOption,
     displayType: payload.displayType,
     values: payload.values,
+    sizeChartUrl: payload.sizeChartUrl?.trim() || null,
   });
 
   return result;
@@ -250,6 +252,7 @@ export default function ProductEditor() {
   const [displayType, setDisplayType] = useState<SwatchDisplayType>(
     (existing?.displayType as SwatchDisplayType) ?? "color",
   );
+  const [sizeChartUrl, setSizeChartUrl] = useState(existing?.sizeChartUrl ?? "");
 
   const currentValues = useMemo(
     () => options.find((o) => o.name === optionName)?.values ?? [],
@@ -332,7 +335,14 @@ export default function ProductEditor() {
       return { value: v, type: displayType };
     });
     fetcher.submit(
-      { payload: JSON.stringify({ swatchOption: optionName, displayType, values }) },
+      {
+        payload: JSON.stringify({
+          swatchOption: optionName,
+          displayType,
+          values,
+          sizeChartUrl,
+        }),
+      },
       { method: "POST" },
     );
   };
@@ -396,6 +406,15 @@ export default function ProductEditor() {
                 />
               </Box>
             </InlineStack>
+
+            <TextField
+              label="Size chart URL (optional)"
+              value={sizeChartUrl}
+              onChange={setSizeChartUrl}
+              autoComplete="off"
+              placeholder="https://…"
+              helpText="Shows a “Size chart” link next to the swatches that opens this page."
+            />
           </BlockStack>
         </Card>
 

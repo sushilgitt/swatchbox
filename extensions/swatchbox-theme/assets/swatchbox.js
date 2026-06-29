@@ -193,26 +193,57 @@
     return "50%";
   }
 
-  /* Find the featured image of a variant that has `value` for `optionName`. */
-  function variantImageFor(value, optionName, data) {
-    var product = data.product || {};
-    var names = product.optionNames || [];
-    var idx = -1;
+  function optionIndex(optionName, data) {
+    var names = (data.product && data.product.optionNames) || [];
     for (var i = 0; i < names.length; i++) {
-      if (norm(names[i]) === norm(optionName)) {
-        idx = i;
-        break;
-      }
+      if (norm(names[i]) === norm(optionName)) return i;
     }
+    return -1;
+  }
+
+  /* First variant that has `value` for `optionName`. */
+  function variantForValue(value, optionName, data) {
+    var idx = optionIndex(optionName, data);
     if (idx < 0) return null;
-    var variants = product.variants || [];
+    var variants = (data.product && data.product.variants) || [];
     for (var v = 0; v < variants.length; v++) {
       var opts = variants[v].options || [];
-      if (norm(opts[idx]) === norm(value) && variants[v].featuredImage) {
-        return variants[v].featuredImage;
-      }
+      if (norm(opts[idx]) === norm(value)) return variants[v];
     }
     return null;
+  }
+
+  function variantImageFor(value, optionName, data) {
+    var variant = variantForValue(value, optionName, data);
+    return variant && variant.featuredImage ? variant.featuredImage : null;
+  }
+
+  /* Size-chart modal (lazy, removed on close / backdrop click). */
+  function openSizeChart(url) {
+    var existing = document.querySelector(".swatchbox__modal");
+    if (existing) existing.remove();
+    var overlay = document.createElement("div");
+    overlay.className = "swatchbox__modal";
+    var box = document.createElement("div");
+    box.className = "swatchbox__modal-box";
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "swatchbox__modal-close";
+    close.setAttribute("aria-label", "Close");
+    close.innerHTML = "&times;";
+    close.addEventListener("click", function () {
+      overlay.remove();
+    });
+    var frame = document.createElement("iframe");
+    frame.className = "swatchbox__modal-frame";
+    frame.setAttribute("src", url);
+    box.appendChild(close);
+    box.appendChild(frame);
+    overlay.appendChild(box);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
   }
 
   /*
@@ -258,27 +289,16 @@
     var size = settings.size || 36;
     var shape = settings.shape || "circle";
 
-    var wrap = document.createElement("div");
-    wrap.className = "swatchbox";
-    wrap.setAttribute("data-option", optionName);
-
-    var label = document.createElement("div");
-    label.className = "swatchbox__label";
-    var labelName = document.createElement("span");
-    labelName.className = "swatchbox__label-name";
-    labelName.textContent = optionName + ": ";
-    var selectedSpan = document.createElement("span");
-    selectedSpan.className = "swatchbox__selected";
-    label.appendChild(labelName);
-    label.appendChild(selectedSpan);
-    wrap.appendChild(label);
-
+    var c = createWrap(optionName, "color", settings);
     var list = document.createElement("div");
     list.className = "swatchbox__swatches";
-    wrap.appendChild(list);
+    c.wrap.appendChild(list);
 
     var buttons = [];
     values.forEach(function (v) {
+      var item = document.createElement("div");
+      item.className = "swatchbox__item";
+
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "swatchbox__swatch";
@@ -298,17 +318,28 @@
       }
       btn.appendChild(fill);
 
+      if (settings.showBadges && v.onSale) {
+        var badge = document.createElement("span");
+        badge.className = "swatchbox__badge";
+        badge.textContent = "Sale";
+        btn.appendChild(badge);
+      }
+
       btn.addEventListener("click", function () {
         selectValue(control, v.value);
         setActive(v.value);
       });
+      item.appendChild(btn);
 
-      list.appendChild(btn);
+      var cap = captionFor(v, settings);
+      if (cap) item.appendChild(cap);
+
+      list.appendChild(item);
       buttons.push({ value: v.value, el: btn });
     });
 
     function setActive(value) {
-      selectedSpan.textContent = value || "";
+      c.selectedSpan.textContent = value || "";
       buttons.forEach(function (b) {
         var on = norm(b.value) === norm(value);
         b.el.setAttribute("aria-pressed", on ? "true" : "false");
@@ -316,19 +347,13 @@
       });
     }
 
-    mount.parentNode.insertBefore(wrap, mount);
+    mount.parentNode.insertBefore(c.wrap, mount);
     setActive(currentValue(control));
-
-    var syncEl = control.kind === "select" ? control.el : control.inputs[0].form;
-    if (syncEl) {
-      syncEl.addEventListener("change", function () {
-        setActive(currentValue(control));
-      });
-    }
+    syncOnChange(control, setActive);
   }
 
-  /* Shared: a wrapper with a "Option: <selected>" label. */
-  function createWrap(optionName, modifier) {
+  /* Shared: a wrapper with a "Option: <selected>" label + optional size chart. */
+  function createWrap(optionName, modifier, settings) {
     var wrap = document.createElement("div");
     wrap.className = "swatchbox swatchbox--" + modifier;
     wrap.setAttribute("data-option", optionName);
@@ -341,8 +366,40 @@
     selectedSpan.className = "swatchbox__selected";
     label.appendChild(nameEl);
     label.appendChild(selectedSpan);
+    if (settings && settings.sizeChartUrl) {
+      var sc = document.createElement("button");
+      sc.type = "button";
+      sc.className = "swatchbox__sizechart";
+      sc.textContent = "Size chart";
+      sc.addEventListener("click", function () {
+        openSizeChart(settings.sizeChartUrl);
+      });
+      label.appendChild(sc);
+    }
     wrap.appendChild(label);
     return { wrap: wrap, selectedSpan: selectedSpan };
+  }
+
+  /* Build the optional caption (value name + price) under a swatch/button. */
+  function captionFor(v, settings) {
+    if (!settings.showLabels && !(settings.showPrice && v.priceFormatted)) {
+      return null;
+    }
+    var cap = document.createElement("span");
+    cap.className = "swatchbox__caption";
+    if (settings.showLabels) {
+      var nm = document.createElement("span");
+      nm.className = "swatchbox__cap-name";
+      nm.textContent = v.value;
+      cap.appendChild(nm);
+    }
+    if (settings.showPrice && v.priceFormatted) {
+      var pr = document.createElement("span");
+      pr.className = "swatchbox__cap-price";
+      pr.textContent = v.priceFormatted;
+      cap.appendChild(pr);
+    }
+    return cap;
   }
 
   function syncOnChange(control, setActive) {
@@ -355,7 +412,7 @@
   }
 
   function buildButtons(optionName, values, settings, control, mount) {
-    var c = createWrap(optionName, "buttons");
+    var c = createWrap(optionName, "buttons", settings);
     var list = document.createElement("div");
     list.className = "swatchbox__buttons";
     c.wrap.appendChild(list);
@@ -366,7 +423,23 @@
       btn.type = "button";
       btn.className = "swatchbox__button";
       btn.setAttribute("data-value", v.value);
-      btn.textContent = v.value;
+
+      var txt = document.createElement("span");
+      txt.textContent = v.value;
+      btn.appendChild(txt);
+      if (settings.showPrice && v.priceFormatted) {
+        var pr = document.createElement("span");
+        pr.className = "swatchbox__btn-price";
+        pr.textContent = v.priceFormatted;
+        btn.appendChild(pr);
+      }
+      if (settings.showBadges && v.onSale) {
+        var badge = document.createElement("span");
+        badge.className = "swatchbox__badge swatchbox__badge--inline";
+        badge.textContent = "Sale";
+        btn.appendChild(badge);
+      }
+
       btn.addEventListener("click", function () {
         selectValue(control, v.value);
         setActive(v.value);
@@ -390,7 +463,7 @@
   }
 
   function buildDropdown(optionName, values, settings, control, mount) {
-    var c = createWrap(optionName, "dropdown");
+    var c = createWrap(optionName, "dropdown", settings);
     var dd = document.createElement("div");
     dd.className = "swatchbox__dd";
 
@@ -428,8 +501,21 @@
         item.appendChild(dot);
       }
       var txt = document.createElement("span");
+      txt.className = "swatchbox__dd-name";
       txt.textContent = v.value;
       item.appendChild(txt);
+      if (settings.showPrice && v.priceFormatted) {
+        var ddpr = document.createElement("span");
+        ddpr.className = "swatchbox__dd-price";
+        ddpr.textContent = v.priceFormatted;
+        item.appendChild(ddpr);
+      }
+      if (settings.showBadges && v.onSale) {
+        var ddbadge = document.createElement("span");
+        ddbadge.className = "swatchbox__badge swatchbox__badge--inline";
+        ddbadge.textContent = "Sale";
+        item.appendChild(ddbadge);
+      }
       item.addEventListener("click", function () {
         selectValue(control, v.value);
         setActive(v.value);
@@ -517,15 +603,15 @@
     var specs = getSpecs(data);
     if (!specs.length) return;
 
+    var g = data.global || {};
+    var s = data.settings || {};
     var settings = {
-      shape:
-        (data.global && data.global.shape) ||
-        (data.settings && data.settings.shape) ||
-        "circle",
-      size:
-        (data.global && data.global.size) ||
-        (data.settings && data.settings.size) ||
-        36,
+      shape: g.shape || s.shape || "circle",
+      size: g.size || s.size || 36,
+      showPrice: g.showPrice != null ? !!g.showPrice : !!s.showPrice,
+      showLabels: !!g.showLabels,
+      showBadges: g.showBadges !== false,
+      sizeChartUrl: (data.config && data.config.sizeChartUrl) || null,
     };
 
     var rendered = 0;
@@ -536,6 +622,19 @@
 
       var resolved = resolveValues(controlValues(control), spec, data);
       if (!resolved.length) return;
+
+      // Enrich each value with its variant's price + sale status.
+      resolved.forEach(function (rv) {
+        var variant = variantForValue(rv.value, spec.optionName, data);
+        if (variant) {
+          rv.priceFormatted = variant.priceFormatted;
+          rv.available = variant.available;
+          rv.onSale = !!(
+            variant.compareAtPrice != null &&
+            Number(variant.compareAtPrice) > Number(variant.price)
+          );
+        }
+      });
 
       var mount = mountPointFor(control);
       var dt = spec.displayType || "color";

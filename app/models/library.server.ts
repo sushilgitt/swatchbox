@@ -161,7 +161,24 @@ export async function compileGlobal(shop: string) {
     shape: settings?.swatchShape ?? "circle",
     size: settings?.swatchSize ?? 36,
     showPrice: settings?.showPrice ?? false,
+    showLabels: settings?.showLabels ?? false,
+    showBadges: settings?.showBadges ?? true,
   };
+}
+
+/** Update the picker-metadata toggles (price / labels / badges). */
+export async function updateMetadataSettings(
+  shop: string,
+  flags: { showPrice?: boolean; showLabels?: boolean; showBadges?: boolean },
+): Promise<void> {
+  await prisma.shopSettings.update({
+    where: { shop },
+    data: {
+      ...(typeof flags.showPrice === "boolean" ? { showPrice: flags.showPrice } : {}),
+      ...(typeof flags.showLabels === "boolean" ? { showLabels: flags.showLabels } : {}),
+      ...(typeof flags.showBadges === "boolean" ? { showBadges: flags.showBadges } : {}),
+    },
+  });
 }
 
 /** Publish the global settings to the shop-owned metafield. */
