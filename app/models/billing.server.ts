@@ -6,10 +6,14 @@ import { PRO_PLAN } from "../lib/plans";
 export { PRO_PLAN, FREE_DISPLAY_TYPES, isFreeDisplayType } from "../lib/plans";
 
 /**
- * Use test charges by default (required for development stores — no real money).
- * Set SHOPIFY_BILLING_TEST=false in production to take live charges.
+ * Billing mode. Real (live) charges in production; test charges in development.
+ * Override explicitly with SHOPIFY_BILLING_TEST=true|false (e.g. set "true" to
+ * test the upgrade flow on a development store, which cannot take real charges).
  */
-export const BILLING_TEST = process.env.SHOPIFY_BILLING_TEST !== "false";
+export const BILLING_TEST =
+  process.env.SHOPIFY_BILLING_TEST != null
+    ? process.env.SHOPIFY_BILLING_TEST !== "false"
+    : process.env.NODE_ENV !== "production";
 
 // The billing context returned by authenticate.admin.
 type Billing = Awaited<ReturnType<typeof authenticate.admin>>["billing"];
