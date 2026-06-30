@@ -71,7 +71,7 @@ const PRO_FEATURES = [
 ];
 
 export default function Billing() {
-  const { isPro, subscriptions, test } = useLoaderData<typeof loader>();
+  const { isPro, subscriptions } = useLoaderData<typeof loader>();
   const upgrade = useFetcher();
   const cancel = useFetcher();
   const subId = subscriptions[0]?.id;
@@ -80,11 +80,6 @@ export default function Billing() {
     <Page>
       <TitleBar title="Plans" />
       <BlockStack gap="400">
-        {test && (
-          <Text as="p" tone="subdued" variant="bodySm">
-            Test mode is on — charges are simulated (no real money) for development.
-          </Text>
-        )}
         <Layout>
           <Layout.Section variant="oneHalf">
             <Card>
