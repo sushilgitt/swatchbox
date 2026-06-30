@@ -4,7 +4,7 @@ import type {
   LoaderFunctionArgs,
   SerializeFrom,
 } from "@remix-run/node";
-import { useFetcher, useLoaderData } from "@remix-run/react";
+import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -97,6 +97,7 @@ export default function LibraryIndex() {
   const fetcher = useFetcher<typeof action>();
   const sync = useFetcher<typeof action>();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
@@ -164,7 +165,7 @@ export default function LibraryIndex() {
         <button onClick={runAutoSync}>
           {syncing ? "Syncing…" : "Auto-sync from products"}
         </button>
-        <button onClick={() => (window.location.href = "/app/library/import")}>
+        <button onClick={() => navigate("/app/library/import")}>
           Import CSV
         </button>
       </TitleBar>
